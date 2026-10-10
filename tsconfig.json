@@ -14,5 +14,5 @@
     "allowImportingTsExtensions": false,
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "next-env.d.ts"]
 }

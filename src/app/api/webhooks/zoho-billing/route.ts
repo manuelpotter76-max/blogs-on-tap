@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { getDb } from "@/lib/db/client";
 import { verifyZohoSignature } from "@/lib/zoho/verify-signature";
 import { storeBillingEvent, processPendingBillingEvents, type ZohoEvent } from "@/lib/zoho/billing-events";
@@ -35,8 +36,7 @@ export async function POST(request: Request): Promise<Response> {
   const result = await storeBillingEvent(db, event);
 
   // Process now so the customer's onboarding is not waiting on the next cron tick.
-  const { waitUntil } = await import("@vercel/functions");
-  waitUntil(processPendingBillingEvents(db).catch((e) => console.error("billing processing failed", e)));
+  after(() => processPendingBillingEvents(db).catch((e) => console.error("billing processing failed", e)));
 
   return Response.json({ received: true, result });
 }
