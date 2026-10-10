@@ -25,7 +25,11 @@ let pool: Db | undefined;
 export async function getDb(): Promise<Db> {
   if (pool) return pool;
   const { Pool } = await import("pg");
-  const p = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
+  const p = new Pool({
+    connectionString: process.env.DATABASE_URL?.trim(),
+    max: 5,
+    connectionTimeoutMillis: 8000, // fail fast instead of hanging the function
+  });
   pool = {
     query: (text, params) => p.query(text, params as unknown[]) as never,
     async transaction(fn) {
