@@ -38,6 +38,7 @@ export async function runWebsiteFetch(db: Db, task: Task, crawl: Crawl = crawlSi
     await tx.query(
       `insert into app.audit_events (org_id, actor, action, target, details) values ($1, 'system', 'website.fetched', $2, $3)`,
       [orgId, starts[0] ?? "", JSON.stringify({ pages: pages.length, skipped: skipped.slice(0, 20) })]);
-    await enqueue(tx, orgId, "business_research", `business_research:${orgId}:1`);
+    const next = typeof task.payload.next_key === "string" ? task.payload.next_key : `business_research:${orgId}:1`;
+    await enqueue(tx, orgId, "business_research", next);
   });
 }
