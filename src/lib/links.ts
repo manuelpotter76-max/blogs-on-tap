@@ -8,18 +8,20 @@ import type { Queryable } from "@/lib/db/client";
  * re-sent with the same link. Links expire, and can be revoked (re-sending an
  * onboarding link revokes the old one).
  */
-export type LinkPurpose = "onboarding" | "profile_review" | "topic_review";
+export type LinkPurpose = "onboarding" | "profile_review" | "topic_review" | "article_review";
 
 export const LINK_DAYS: Record<LinkPurpose, number> = {
   onboarding: 30,
   profile_review: 21,
   topic_review: 21,
+  article_review: 45,
 };
 
 export const LINK_PATH: Record<LinkPurpose, string> = {
   onboarding: "/start",
   profile_review: "/review/profile",
   topic_review: "/review/topics",
+  article_review: "/review/article",
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

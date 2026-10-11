@@ -2,6 +2,7 @@ import { getDb } from "@/lib/db/client";
 import { processPendingBillingEvents } from "@/lib/zoho/billing-events";
 import { runTasks } from "@/lib/tasks/queue";
 import { HANDLERS } from "@/lib/tasks/handlers";
+import { runArticleJobs, scheduleJobs } from "@/lib/articles/jobs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,9 @@ export const maxDuration = 300;
  * heartbeat so we can confirm from the database that the timer is healthy.
  * Phase 3: runs onboarding tasks (emails, website reading, research and
  * strategy agents), a couple per tick so one slow AI call can't starve the rest.
- * Phase 4 adds: open job slots for paid cycles, claim jobs, run AI steps.
+ * Phase 4: opens article jobs for paid, onboarded customers, then moves one
+ * article forward (brief, draft, quality review, revision). New AI steps only
+ * start in the first minute, so a slow call can't push the tick past its limit.
  */
 export async function GET(request: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET;
@@ -26,14 +29,17 @@ export async function GET(request: Request): Promise<Response> {
   }
   try {
     const db = await getDb();
+    const started = Date.now();
+    const worker = `tick-${crypto.randomUUID().slice(0, 8)}`;
     const billing = await processPendingBillingEvents(db);
-    const tasks = await runTasks(db, HANDLERS, {
-      worker: `tick-${crypto.randomUUID().slice(0, 8)}`, limit: 2, deadlineMs: 60_000,
-    });
+    const tasks = await runTasks(db, HANDLERS, { worker, limit: 2, deadlineMs: 60_000 });
     const tasksRun = tasks.done + tasks.retried + tasks.failed;
+    const jobsCreated = await scheduleJobs(db);
+    const left = 60_000 - (Date.now() - started);
+    const articles = left > 5_000 ? await runArticleJobs(db, { worker, deadlineMs: left }) : { steps: 0, failed: 0 };
     await db.query(`insert into app.worker_heartbeats (billing_events_processed, tasks_run) values ($1, $2)`,
-      [billing, tasksRun]);
-    return Response.json({ billing_events_processed: billing, tasks });
+      [billing, tasksRun + articles.steps]);
+    return Response.json({ billing_events_processed: billing, tasks, jobs_created: jobsCreated, articles });
   } catch (err) {
     console.error("worker tick failed", (err as { code?: string }).code, err);
     return new Response("worker error", { status: 500 });

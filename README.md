@@ -56,6 +56,21 @@ The customer journey from payment to approved topics, with no manual steps:
 - Uploads: PDF, .txt, .md only, checked by content, 4 MB each, 5 per customer, private bucket, paths prefixed by customer id.
 - Tenants can read their own onboarding rows; links, emails, tasks and AI runs are server-only.
 
+## What's built (Phase 4: writing, quality review, delivery)
+
+One production job = one article = one credit. The worker moves each job through:
+
+1. **Brief** (Agent: brief): reader, questions to answer, outline, facts allowed, links allowed.
+2. **Draft** (Agent C: writing): Markdown only, structured fields (title, meta, slug, excerpt, tags, CTA, link list, claim sources).
+3. **Quality review** (Agent D): code checks (length, title/meta, prohibited claims, avoided terms, placeholders, raw HTML, CTA, figures to verify) plus an AI editor scoring accuracy, usefulness, voice and more. Pass/fail is decided in code.
+4. Fails are revised automatically up to 2 times, then escalate to you with a flag.
+5. **Your review** at `/admin/articles`: approve and send (credit consumed here, once), edit it yourself, send it back with a note, retry a failed job, or give up (credit returned, topic kept or retired).
+6. **Delivery**: email with a link to `/review/article/<link>`, where the customer reads, copies (rich text or HTML), downloads (HTML or Markdown with front matter), approves, or asks for changes within the plan's revision allowance. Changes go back through QA and your review.
+
+Safety: AI text only becomes HTML through our own renderer (escapes everything, rebuilds headings, lists, emphasis, links). Links to anything but the customer's own site and CTA are stripped in code. AI failures back off and retry; after 4 tries the job is marked failed with its credit still reserved, never silently spent or released.
+
+Models: `OPENAI_MODEL_BRIEF`, `OPENAI_MODEL_WRITING`, `OPENAI_MODEL_QA` (each falls back to `OPENAI_MODEL_DEFAULT`).
+
 ## How credits work
 
 Credits are never a number we overwrite. Every movement is a row in
