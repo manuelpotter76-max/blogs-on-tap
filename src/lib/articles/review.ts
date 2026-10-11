@@ -156,6 +156,7 @@ export type CustomerArticle = {
   revisionsLeft: number;
   windowOpen: boolean;
   revisionDays: number;
+  autoApproveAt: string | null;   // when silence counts as approval
 };
 
 export async function loadForCustomer(db: Queryable, orgId: string, articleId: string): Promise<CustomerArticle | null> {
@@ -180,6 +181,8 @@ export async function loadForCustomer(db: Queryable, orgId: string, articleId: s
   return {
     articleId: r.id, jobState: r.state, content, decision: r.customer_decision,
     revisionsLeft: Math.max(0, r.revision_rounds - r.customer_revisions), windowOpen, revisionDays: r.revision_window_days,
+    autoApproveAt: r.delivered_at
+      ? new Date(new Date(r.delivered_at).getTime() + r.revision_window_days * 86_400_000).toISOString() : null,
   };
 }
 

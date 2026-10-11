@@ -74,3 +74,17 @@ export function articleReady(title: string, url: string, revisedVersion: boolean
     text: text(heading, ps, url, FOOTER),
   };
 }
+
+export function articleReminder(title: string, url: string, daysLeft: number): EmailContent {
+  const heading = "Any changes to your article?";
+  const when = daysLeft <= 1 ? "tomorrow" : `in ${daysLeft} days`;
+  const ps = [
+    `Just checking in on "${title}".`,
+    `If you'd like anything changed, you can ask from the article page. Otherwise we'll mark it approved ${when}, and you're all set.`,
+  ];
+  return {
+    subject: `Reminder: ${title}`,
+    html: layout(heading, ps, "Open my article", url, FOOTER),
+    text: text(heading, ps, url, FOOTER),
+  };
+}

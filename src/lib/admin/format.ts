@@ -72,6 +72,11 @@ const ACTION_LABEL: Record<string, string> = {
   "strategy.more_requested": "More topic ideas requested",
   "strategy.needs_admin": "Skipped every topic batch: needs a person",
   "topics.decided": "Picked topics",
+  "article.auto_approved": "Article approved automatically (no reply in time)",
+  "article.customer_approved": "Customer approved an article",
+  "article.delivered": "Article delivered",
+  "article.approved": "You approved an article",
+  "billing.returning_customer": "Returning customer, new subscription",
   "task.failed": "A background step failed",
   "task.retried": "Background step retried",
 };

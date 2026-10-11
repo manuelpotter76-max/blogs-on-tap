@@ -78,6 +78,10 @@ export default async function ArticlePage({ params, searchParams }: {
       {!approved && !revising && view.jobState === "delivered" && (
         <section className="card">
           <h2 style={{ marginTop: 0 }}>Happy with it?</h2>
+          {view.autoApproveAt && (
+            <p className="help">If we don&apos;t hear from you, we&apos;ll mark it approved on{" "}
+              {new Date(view.autoApproveAt).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/New_York" })}.</p>
+          )}
           <form action={action} style={{ marginBottom: 18 }}>
             <input type="hidden" name="decision" value="approve" />
             <button type="submit">Yes, approve it</button>
@@ -99,7 +103,7 @@ export default async function ArticlePage({ params, searchParams }: {
           )}
         </section>
       )}
-      {approved && <p className="fine">You approved this article. Thanks!</p>}
+      {approved && <p className="fine">This article is approved. Thanks!</p>}
     </CustomerShell>
   );
 }
