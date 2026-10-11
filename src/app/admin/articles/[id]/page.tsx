@@ -58,7 +58,7 @@ export default async function ArticleReviewPage({ params, searchParams }: {
       <Topbar />
       <main className="wrap">
         <p style={{ margin: "0 0 8px" }}><a href="/admin/articles">← All articles</a> · <a href={`/admin/customers/${d.job.org_id}`}>{d.customer.name}</a></p>
-        <h1>{c?.seo_title ?? d.topic?.title ?? "Article"}</h1>
+        <h1>{c?.seo_title?.trim() || d.topic?.title || "Article"}</h1>
         <p className="sub">
           <span className={`pill ${d.job.state === "failed" ? "cancelled" : inReview ? "past_due" : ""}`}>{STATE_LABEL[d.job.state] ?? d.job.state}</span>
           {d.job.flagged && <span className="pill cancelled" style={{ marginLeft: 6 }}>flagged: read carefully</span>}

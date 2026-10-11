@@ -6,22 +6,50 @@ import { linkUrl } from "../links";
 export type ArticleJobRow = {
   job_id: string; org_id: string; customer: string; topic: string | null; title: string | null; state: string;
   flagged: boolean; last_error: string | null; updated_at: string; version: number | null; cost_usd: string | null;
+  auto_approved: boolean;
 };
 
-/** Every article job, newest activity first. The page groups them by what needs doing. */
-export async function listArticleJobs(db: Db): Promise<ArticleJobRow[]> {
+export type ArticleFilters = { customer?: string; status?: string };
+
+/** Status filter values: every job state, plus the two kinds of "done". */
+export const AUTO_APPROVED = "auto_approved";
+
+/**
+ * Article jobs, newest activity first, optionally narrowed to one customer
+ * and/or one status. The page groups them by what needs doing.
+ */
+export async function listArticleJobs(db: Db, f: ArticleFilters = {}): Promise<ArticleJobRow[]> {
   const { rows } = await db.query<ArticleJobRow>(`
-    select j.id as job_id, j.org_id, o.name as customer, t.title as topic, v.content->>'seo_title' as title,
-           j.state, j.flagged, j.last_error, j.updated_at, a.current_version as version,
-           (select sum(r.cost_usd)::text from app.ai_runs r where r.job_id = j.id) as cost_usd
-      from app.production_jobs j
-      join app.organizations o on o.id = j.org_id
-      left join app.topics t on t.id = j.topic_id
-      left join app.articles a on a.job_id = j.id
-      left join app.article_versions v on v.article_id = a.id and v.version = a.current_version
-     where j.state <> 'cancelled'
-     order by j.updated_at desc
-     limit 200`);
+    select * from (
+      select j.id as job_id, j.org_id, o.name as customer, t.title as topic, nullif(trim(v.content->>'seo_title'), '') as title,
+             j.state, j.flagged, j.last_error, j.updated_at, a.current_version as version,
+             (select sum(r.cost_usd)::text from app.ai_runs r where r.job_id = j.id) as cost_usd,
+             (aa.target is not null) as auto_approved
+        from app.production_jobs j
+        join app.organizations o on o.id = j.org_id
+        left join app.topics t on t.id = j.topic_id
+        left join app.articles a on a.job_id = j.id
+        left join app.article_versions v on v.article_id = a.id and v.version = a.current_version
+        left join (select distinct e.target from app.audit_events e where e.action = 'article.auto_approved') aa
+               on aa.target = j.id::text
+       where j.state <> 'cancelled'
+         and ($1::uuid is null or j.org_id = $1::uuid)
+    ) x
+     where $2::text is null
+        or ($2::text = 'auto_approved' and x.state = 'customer_approved' and x.auto_approved)
+        or ($2::text = 'customer_approved' and x.state = 'customer_approved' and not x.auto_approved)
+        or ($2::text not in ('auto_approved', 'customer_approved') and x.state = $2::text)
+     order by x.updated_at desc
+     limit 500`, [f.customer ?? null, f.status ?? null]);
+  return rows;
+}
+
+/** Customers that have at least one article, for the filter dropdown. */
+export async function listArticleCustomers(db: Db): Promise<{ org_id: string; name: string }[]> {
+  const { rows } = await db.query<{ org_id: string; name: string }>(`
+    select o.id as org_id, o.name from app.organizations o
+     where exists (select 1 from app.production_jobs j where j.org_id = o.id and j.state <> 'cancelled')
+     order by lower(o.name)`);
   return rows;
 }
 

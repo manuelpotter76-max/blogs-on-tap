@@ -6,8 +6,8 @@ import { ARTICLE_SCHEMA, type ArticleContent } from "@/lib/articles/content";
  * Agents for Phase 4. Bump a PROMPT_VERSION whenever its instructions change;
  * every AI run records which version produced it.
  */
-export const BRIEF_VERSION = "article_brief.v2";
-export const WRITER_VERSION = "article_writer.v2";
+export const BRIEF_VERSION = "article_brief.v3";
+export const WRITER_VERSION = "article_writer.v3";
 export const QA_VERSION = "quality_review.v2";
 export { ARTICLE_SCHEMA };
 
@@ -83,7 +83,9 @@ Rules:
 - Links: only URLs from ALLOWED LINKS. If none fit, plan none.
 - Keep the call to action honest and natural, never pushy.
 - Regulated fields (legal, medical, financial): general education only, no individual advice; note what to avoid.
-- Plan for plain prose, headings and lists only. No tables, images, charts or embeds: they can't be delivered.`;
+- Plan for plain prose, headings and lists only. No tables, images, charts or embeds: they can't be delivered.
+- Always plan an article that can be written well right now from the profile and widely known general knowledge. Never tell the writer to wait for more information, and never plan a section that needs facts nobody has supplied.
+- If the topic as worded needs specifics the profile doesn't have (named restaurants or other businesses, reviews, rankings, prices, hours, events, people), keep the reader's need but pick the most useful honest angle that doesn't depend on them, for example what to look for, how to choose, or what to expect. Say so in the angle and describe the adjusted focus in the outline.`;
 
 export function briefInput(o: {
   profile: BusinessProfile; topic: TopicRow; links: AllowedLink[]; others: string[]; minWords: number; maxWords: number;
@@ -120,7 +122,8 @@ Format rules:
 - markdown: the body only. Start with a short intro paragraph. No title line, no HTML, no images, no tables (if the brief asks for a table, use a short list instead).
 - Links: only URLs from ALLOWED LINKS, written as [anchor](url). No other links at all.
 - End with the call to action woven into a short closing section.
-- source_notes: list every specific claim about the business and where it came from, so an editor can check it.`;
+- source_notes: list every specific claim about the business and where it came from, so an editor can check it.
+- Always return a complete, publishable article with a title, meta description, excerpt and call to action. Never write to the editor, never ask for more information, and never return an empty or placeholder article. If facts are missing, write the best honest article you can without them.`;
 
 export function writerInput(o: {
   profile: BusinessProfile; topic: TopicRow; brief: Brief; links: AllowedLink[]; minWords: number; maxWords: number;
