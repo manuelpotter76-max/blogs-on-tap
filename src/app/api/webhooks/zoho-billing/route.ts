@@ -16,25 +16,31 @@ export const runtime = "nodejs";
  * 2. Store the event once, keyed by Zoho's event_id.
  * 3. Answer 200 fast; process right after the response, and the worker tick
  *    retries anything that failed.
+ * Rejected requests are written to app.webhook_rejections for diagnosis.
  */
 export async function POST(request: Request): Promise<Response> {
   const rawBody = await request.text();
   const url = new URL(request.url);
+  const contentType = request.headers.get("content-type");
+  const signature = request.headers.get("x-zoho-webhook-signature");
 
   const ok = verifyZohoSignature({
     secret: process.env.ZOHO_BILLING_WEBHOOK_SECRET ?? "",
-    signatureHeader: request.headers.get("x-zoho-webhook-signature"),
+    signatureHeader: signature,
     query: url.searchParams,
-    contentType: request.headers.get("content-type"),
+    contentType,
     rawBody,
   });
-  if (!ok) return new Response("invalid signature", { status: 401 });
+  if (!ok) {
+    await recordRejection(signature ? "bad_signature" : "missing_signature", contentType, signature, url.search, rawBody);
+    return new Response("invalid signature", { status: 401 });
+  }
 
   let event: ZohoEvent;
   try {
     event = await normalizeZohoPayload(JSON.parse(rawBody), rawBody);
   } catch (err) {
-    console.error("zoho webhook: unreadable payload", (err as Error).message);
+    await recordRejection("unreadable_payload: " + (err as Error).message, contentType, signature, url.search, rawBody);
     return new Response("unrecognized payload", { status: 400 });
   }
 
@@ -45,4 +51,19 @@ export async function POST(request: Request): Promise<Response> {
   after(() => processPendingBillingEvents(db).catch((e) => console.error("billing processing failed", e)));
 
   return Response.json({ received: true, result });
+}
+
+async function recordRejection(
+  reason: string, contentType: string | null, signature: string | null, query: string, body: string,
+) {
+  console.error("zoho webhook rejected:", reason);
+  try {
+    const db = await getDb();
+    await db.query(
+      `insert into app.webhook_rejections (reason, content_type, signature, query, body) values ($1, $2, $3, $4, $5)`,
+      [reason, contentType, signature, query, body.slice(0, 8192)],
+    );
+  } catch (e) {
+    console.error("could not record webhook rejection", e);
+  }
 }
