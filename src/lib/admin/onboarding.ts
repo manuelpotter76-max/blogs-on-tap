@@ -102,12 +102,18 @@ export async function runAdminOnboardingAction(
       return "ok";
     }
     if (action === "rerun_research") {
-      const { rows } = await tx.query<{ status: string }>(
-        `select bp.status from app.business_profiles bp join app.onboarding_responses o on o.org_id = bp.org_id
+      const { rows } = await tx.query<{ status: string; website_consent: boolean }>(
+        `select bp.status, o.website_consent from app.business_profiles bp join app.onboarding_responses o on o.org_id = bp.org_id
           where bp.org_id = $1 and o.submitted_at is not null`, [orgId]);
       if (!rows[0] || rows[0].status === "confirmed") return "not_allowed";
       await tx.query(`update app.business_profiles set status = 'researching', updated_at = now() where org_id = $1`, [orgId]);
-      await enqueue(tx, orgId, "business_research", `business_research:${orgId}:admin:${stamp}`);
+      const researchKey = `business_research:${orgId}:admin:${stamp}`;
+      // Re-read the website first (if they allowed it), so fixes to the reader and site changes are picked up.
+      if (rows[0].website_consent) {
+        await enqueue(tx, orgId, "website_fetch", `website_fetch:${orgId}:admin:${stamp}`, { next_key: researchKey });
+      } else {
+        await enqueue(tx, orgId, "business_research", researchKey);
+      }
       await audit(tx, orgId, adminId, "profile.research_rerun");
       return "ok";
     }

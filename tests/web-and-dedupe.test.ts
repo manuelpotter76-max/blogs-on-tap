@@ -101,3 +101,32 @@ test("upload checks go by content", () => {
   assert.equal(checkUpload("a.md", new TextEncoder().encode("# Brand")).ok, true);
   assert.equal(checkUpload("a.pdf", new Uint8Array(5 * 1024 * 1024)).ok, false, "too big");
 });
+
+test("pinned lookup answers both ways Node asks (single address and { all: true } list)", async () => {
+  const { pinnedLookup } = await import("../src/lib/web/fetch-site");
+  const lookup = pinnedLookup("93.184.215.14", 4);
+  const single = await new Promise((r) => lookup("x.test", { family: 0 }, (_e, a, f) => r([a, f])));
+  assert.deepEqual(single, ["93.184.215.14", 4]);
+  const list = await new Promise((r) => lookup("x.test", { all: true }, (_e, a) => r(a)));
+  assert.deepEqual(list, [{ address: "93.184.215.14", family: 4 }]);
+});
+
+test("pinned lookup works inside a real Node connection (Node 20+ default settings)", async () => {
+  const http = await import("node:http");
+  const { pinnedLookup } = await import("../src/lib/web/fetch-site");
+  const server = http.createServer((_q, s) => s.end("ok")).listen(0, "127.0.0.1");
+  await new Promise((r) => server.once("listening", r));
+  const port = (server.address() as { port: number }).port;
+  try {
+    const body = await new Promise<string>((resolve, reject) => {
+      http.get({ host: "pinned.test", port, path: "/", lookup: pinnedLookup("127.0.0.1", 4) as never }, (res) => {
+        let d = "";
+        res.on("data", (c) => (d += c));
+        res.on("end", () => resolve(d));
+      }).on("error", reject);
+    });
+    assert.equal(body, "ok", "connected through the pinned address, not real DNS");
+  } finally {
+    server.close();
+  }
+});

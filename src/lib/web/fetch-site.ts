@@ -67,6 +67,22 @@ const defaultLookup: LookupFn = (hostname) =>
 
 export type FetchedPage = { url: string; status: number; contentType: string; body: string };
 
+type LookupCb = (err: Error | null, address: string | { address: string; family: number }[], family?: number) => void;
+
+/**
+ * A DNS lookup that always answers with the one address we already checked.
+ * Node calls it two ways: with { all: true } (the default since Node 20, for
+ * "happy eyeballs") it expects a list, otherwise a single address.
+ */
+export function pinnedLookup(address: string, family: number) {
+  return (_host: string, opts: unknown, cb: LookupCb) => {
+    const callback = (typeof opts === "function" ? opts : cb) as LookupCb;
+    const all = typeof opts === "object" && opts !== null && (opts as { all?: boolean }).all;
+    if (all) callback(null, [{ address, family }]);
+    else callback(null, address, family);
+  };
+}
+
 /** One request to an already-checked URL, pinned to a verified public IP. */
 async function requestOnce(u: URL, lookup: LookupFn): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
   const host = u.hostname.replace(/^\[|\]$/g, "");
@@ -82,7 +98,7 @@ async function requestOnce(u: URL, lookup: LookupFn): Promise<{ status: number; 
       method: "GET",
       headers: { "User-Agent": USER_AGENT, Accept: "text/html,text/plain;q=0.8", "Accept-Encoding": "identity" },
       timeout: TIMEOUT_MS,
-      lookup: (_h, _o, cb) => (cb as (e: Error | null, a: string, f: number) => void)(null, pinned.address, pinned.family),
+      lookup: pinnedLookup(pinned.address, pinned.family) as never,
     }, (res) => {
       let size = 0;
       const chunks: Buffer[] = [];
