@@ -7,6 +7,7 @@ import { scheduleJobs, topUpTopics } from "../src/lib/articles/jobs";
 import { autoApproveArticles, remindAboutArticles } from "../src/lib/articles/lifecycle";
 import { createLink } from "../src/lib/links";
 import { getWeek } from "../src/lib/admin/week";
+import { listArticleJobs, listArticleCustomers } from "../src/lib/admin/articles";
 
 process.env.LINK_SECRET = "test-link-secret-0123456789abcdef0123456789";
 process.env.APP_BASE_URL = "https://app.test";
@@ -99,6 +100,20 @@ test("this-week view loads and shows what's waiting on the customer", async () =
   const w = await getWeek(db);
   assert.ok(w.waiting.some((i) => i.what.startsWith('Reading "A delivered article" (auto-approves')));
   assert.equal(w.needsYou.length, 0);
+});
+
+test("articles list: filter by customer and status; auto-approved is its own status", async () => {
+  const all = await listArticleJobs(db);
+  assert.equal(all.length, 2);
+  const auto = await listArticleJobs(db, { status: "auto_approved" });
+  assert.equal(auto.length, 1);
+  assert.equal(auto[0].auto_approved, true);
+  assert.equal((await listArticleJobs(db, { status: "customer_approved" })).length, 0, "customer-approved excludes auto");
+  assert.equal((await listArticleJobs(db, { status: "delivered" })).length, 1);
+  assert.equal((await listArticleJobs(db, { customer: orgId })).length, 2);
+  assert.equal((await listArticleJobs(db, { customer: "00000000-0000-0000-0000-000000000000" })).length, 0);
+  assert.equal((await listArticleJobs(db, { customer: orgId, status: "auto_approved" })).length, 1);
+  assert.deepEqual((await listArticleCustomers(db)).map((c) => c.org_id), [orgId]);
 });
 
 test("month 2: renewal opens a new cycle, credits land, new jobs take the next topics", async () => {
