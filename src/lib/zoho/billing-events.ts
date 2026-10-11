@@ -148,6 +148,12 @@ async function applyEvent(tx: Queryable, event: ZohoEvent): Promise<void> {
   const status = STATUS_MAP[zsub.status];
   if (!status) throw new Error(`Unknown Zoho subscription status "${zsub.status}"`);
 
+  // Zoho often sends several events for one action within milliseconds
+  // (created + activation). Apply events for the same customer one at a time,
+  // so the second one sees what the first one created.
+  await tx.query(`select pg_advisory_xact_lock(hashtext($1))`,
+    [`zoho_customer:${zsub.customer?.customer_id ?? zsub.subscription_id}`]);
+
   const planVersionId = await findPlanVersion(tx, zsub.plan?.plan_code);
   const eventTime = event.event_time ?? new Date().toISOString();
   let sub = await findSubscription(tx, zsub.subscription_id);
@@ -268,6 +274,17 @@ async function findPlanVersion(tx: Queryable, planCode: string | undefined): Pro
 
 async function createCustomer(tx: Queryable, zsub: ZohoSubscription): Promise<string> {
   const c = zsub.customer ?? {};
+  // A returning customer (cancelled, then subscribed again) keeps their
+  // account: profile, topics and history carry over to the new subscription.
+  if (c.customer_id) {
+    const { rows: known } = await tx.query<{ org_id: string }>(
+      `select org_id from app.external_ids where provider = 'zoho_billing' and kind = 'customer' and external_id = $1`,
+      [c.customer_id]);
+    if (known[0]) {
+      await audit(tx, known[0].org_id, "billing.returning_customer", zsub.subscription_id, {});
+      return known[0].org_id;
+    }
+  }
   const name = c.company_name || c.display_name || "New customer";
   const { rows } = await tx.query<{ id: string }>(
     `insert into app.organizations (name) values ($1) returning id`, [name]);

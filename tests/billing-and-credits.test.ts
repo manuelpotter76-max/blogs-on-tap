@@ -199,3 +199,21 @@ test("test 9: a tenant sees only its own rows and none of the server-only tables
     asTenant(db, a.org_id, (tx) => tx.query(`select app.adjust_credits($1, 10, 'free stuff', 'me')`, [aCycle])),
     /permission denied/);
 });
+
+test("a customer who cancels and subscribes again keeps their account (no duplicate)", async () => {
+  await send(event("subscription_created", { id: "sub_R1", email: "back@again.test", name: "Comeback Co" }));
+  await send(event("subscription_cancelled", { id: "sub_R1", status: "cancelled", email: "back@again.test", name: "Comeback Co" }));
+  const first = await one<{ org_id: string }>(`select org_id from app.subscriptions where zoho_subscription_id = 'sub_R1'`);
+
+  // Same Zoho customer (cust_sub_R1), brand-new subscription.
+  const e = event("subscription_created", { id: "sub_R2", email: "back@again.test", name: "Comeback Co" });
+  e.data!.subscription!.customer!.customer_id = "cust_sub_R1";
+  await send(e);
+  const second = await one<{ org_id: string; status: string }>(`select org_id, status from app.subscriptions where zoho_subscription_id = 'sub_R2'`);
+  assert.equal(second.org_id, first.org_id, "new subscription attached to the existing customer");
+  assert.equal(second.status, "active");
+  assert.equal(await one<{ n: number }>(`select count(*)::int n from app.organizations where name = 'Comeback Co'`).then((r) => r.n), 1);
+  assert.equal(await one<{ n: number }>(
+    `select count(*)::int n from app.pipeline_tasks where org_id = $1 and kind = 'send_onboarding_invite'`, [first.org_id]).then((r) => r.n), 1,
+    "no second onboarding invite");
+});
