@@ -183,7 +183,10 @@ test("test 9: a tenant sees only its own rows and none of the server-only tables
   await assert.rejects(
     asTenant(db, a.org_id, (tx) => tx.query(`update app.subscriptions set status = 'active' returning id`)),
     /permission denied/);
-  const aCycle = (await openCycle("sub_A")).cycle_id;
+  // sub_A was cancelled earlier, so its periods are closed; any of them will do.
+  const aCycle = (await one<{ id: string }>(
+    `select c.id from app.entitlement_cycles c join app.subscriptions s on s.id = c.subscription_id
+      where s.zoho_subscription_id = 'sub_A' limit 1`)).id;
   await assert.rejects(
     asTenant(db, a.org_id, (tx) => tx.query(`select app.adjust_credits($1, 10, 'free stuff', 'me')`, [aCycle])),
     /permission denied/);

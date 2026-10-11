@@ -193,6 +193,11 @@ async function applyEvent(tx: Queryable, event: ZohoEvent): Promise<void> {
     if (upgradedFrom) await applyMidCycleUpgrade(tx, sub.id, upgradedFrom, planVersionId);
   }
 
+  if (status === "cancelled") {
+    // Cancelled now (not at period end): leftover credits expire.
+    await tx.query(`select app.expire_open_cycles($1, 'subscription cancelled')`, [sub.id]);
+  }
+
   const grantable = GRANT_EVENTS.has(event.event_type) || event.event_type === STATE_SNAPSHOT_EVENT;
   if (status === "active" && grantable &&
       zsub.current_term_starts_at && zsub.current_term_ends_at) {

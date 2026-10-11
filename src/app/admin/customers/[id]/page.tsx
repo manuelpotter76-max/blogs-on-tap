@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getDb } from "@/lib/db/client";
 import { getCustomer, recordAdminView } from "@/lib/admin/queries";
 import { requireAdmin } from "@/lib/admin/session";
-import { actionLabel, fmtDate, fmtDateTime, fmtMoney, ledgerLabel, statusLabel } from "@/lib/admin/format";
+import { actionLabel, fmtDate, fmtDateTime, fmtDay, fmtMoney, ledgerLabel, statusLabel } from "@/lib/admin/format";
 import { adjustCreditsAction } from "../../actions";
 import { Topbar } from "../../topbar";
 
@@ -59,7 +59,7 @@ export default async function CustomerPage({
             </div>
           </div>
           <div className="stat"><div className="label">Articles left this month</div><div className="value">{openCycle ? openCycle.available : "-"}</div></div>
-          <div className="stat"><div className="label">Current period</div><div className="value" style={{ fontSize: 15, marginTop: 6 }}>{sub ? `${fmtDate(sub.current_period_start)} to ${fmtDate(sub.current_period_end)}` : "-"}</div></div>
+          <div className="stat"><div className="label">Current period</div><div className="value" style={{ fontSize: 15, marginTop: 6 }}>{sub ? `${fmtDay(sub.current_period_start)} to ${fmtDay(sub.current_period_end)}` : "-"}</div></div>
         </div>
 
         {sub ? (

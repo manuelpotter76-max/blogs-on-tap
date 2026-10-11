@@ -5,6 +5,12 @@ export function fmtDate(value: string | null | undefined): string {
   return new Date(value).toLocaleDateString("en-US", { timeZone: TZ, month: "short", day: "numeric", year: "numeric" });
 }
 
+/** Billing periods come from Zoho as plain dates (stored at midnight UTC), so show them in UTC to avoid a day shift. */
+export function fmtDay(value: string | null | undefined): string {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" });
+}
+
 export function fmtDateTime(value: string | null | undefined): string {
   if (!value) return "-";
   return new Date(value).toLocaleString("en-US", {

@@ -72,3 +72,15 @@ test("newer format: a later unpaid snapshot moves the subscription to past due",
     `select status from app.subscriptions where zoho_subscription_id = 'sub_NEW'`)).rows[0];
   assert.equal(s.status, "past_due");
 });
+
+test("immediate cancellation expires leftover credits and closes the period", async () => {
+  await send(newFormatBody("cancelled", "2026-10-13T09:00:00-0400"));
+  const r = (await db.query<{ status: string; available: number; cycle_status: string }>(
+    `select s.status, b.available, b.status as cycle_status
+       from app.subscriptions s join app.cycle_balances b on b.subscription_id = s.id
+      where s.zoho_subscription_id = 'sub_NEW'`)).rows;
+  assert.deepEqual(r, [{ status: "cancelled", available: 0, cycle_status: "closed" }]);
+  const expired = (await db.query<{ delta: number; reason: string }>(
+    `select delta, reason from app.entitlement_ledger where kind = 'expire'`)).rows;
+  assert.deepEqual(expired, [{ delta: -8, reason: "subscription cancelled" }]);
+});

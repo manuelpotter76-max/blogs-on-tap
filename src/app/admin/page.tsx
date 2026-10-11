@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db/client";
 import { listCustomers } from "@/lib/admin/queries";
 import { requireAdmin } from "@/lib/admin/session";
-import { fmtDate, statusLabel } from "@/lib/admin/format";
+import { fmtDate, fmtDay, statusLabel } from "@/lib/admin/format";
 import { Topbar } from "./topbar";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +52,7 @@ export default async function AdminHome() {
                     <td>{c.plan ?? "-"}</td>
                     <td><span className={`pill ${c.status ?? ""}`}>{statusLabel(c.status)}</span></td>
                     <td className="num">{c.credits_left ?? "-"}</td>
-                    <td>{fmtDate(c.period_end)}</td>
+                    <td>{fmtDay(c.period_end)}</td>
                     <td>{fmtDate(c.created_at)}</td>
                   </tr>
                 ))}
