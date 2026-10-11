@@ -62,3 +62,52 @@ test("credit adjustments validate input and are audited", async () => {
   assert.ok(d?.activity.some((a) => a.action === "credits.adjust"));
   assert.ok(d?.activity.some((a) => a.action === "admin.view_customer"));
 });
+
+// ---- Editing name, business name and email ----
+import { updateCustomerDetails } from "../src/lib/admin/queries";
+
+const owner = async (org: string) => (await db.query<{ email: string; full_name: string | null }>(
+  `select u.email, u.full_name from app.memberships m join app.users u on u.id = m.user_id where m.org_id = $1`, [org])).rows;
+
+test("details: rename the business and change the contact in place; profile follows", async () => {
+  await db.query(`insert into app.profile_versions (org_id, version, data, created_by) values ($1, 1, '{"business_name":"Ybor Bakery","summary":"x"}', 'ai')`, [orgId]);
+  await db.query(`insert into app.business_profiles (org_id, status, current_version) values ($1, 'confirmed', 1)`, [orgId]);
+  const r = await updateCustomerDetails(db, "00000000-0000-0000-0000-000000000001", orgId,
+    { businessName: "  Ybor  Bakery & Cafe ", contactName: "Rosa Diaz", email: "Rosa@YborBakery.test" });
+  assert.equal(r, "ok");
+  assert.equal((await db.query<{ name: string }>(`select name from app.organizations where id = $1`, [orgId])).rows[0].name, "Ybor Bakery & Cafe");
+  assert.deepEqual(await owner(orgId), [{ email: "rosa@yborbakery.test", full_name: "Rosa Diaz" }]);
+  const p = (await db.query<{ data: { business_name: string; summary: string }; created_by: string }>(
+    `select pv.data, pv.created_by from app.business_profiles bp join app.profile_versions pv
+      on pv.org_id = bp.org_id and pv.version = bp.current_version where bp.org_id = $1`, [orgId])).rows[0];
+  assert.equal(p.data.business_name, "Ybor Bakery & Cafe");
+  assert.equal(p.data.summary, "x", "the rest of the profile is untouched");
+  assert.ok(p.created_by.startsWith("admin:"));
+  const a = (await db.query<{ details: { email: { from: string; to: string } } }>(
+    `select details from app.audit_events where org_id = $1 and action = 'customer.details_updated'`, [orgId])).rows[0];
+  assert.equal(a.details.email.from, "owner@yborbakery.test");
+  assert.equal((await listCustomers(db))[0].email, "rosa@yborbakery.test", "customer list shows the new email");
+});
+
+test("details: no-op, bad input and bad email are refused cleanly", async () => {
+  const admin = "00000000-0000-0000-0000-000000000001";
+  assert.equal(await updateCustomerDetails(db, admin, orgId, { businessName: "Ybor Bakery & Cafe", contactName: "Rosa Diaz", email: "rosa@yborbakery.test" }), "unchanged");
+  assert.equal(await updateCustomerDetails(db, admin, orgId, { businessName: "Y", contactName: "", email: "a@b.co" }), "bad_input");
+  assert.equal(await updateCustomerDetails(db, admin, orgId, { businessName: "Ybor Bakery", contactName: "", email: "not an email" }), "bad_email");
+  assert.equal(await updateCustomerDetails(db, admin, "00000000-0000-0000-0000-00000000dead", { businessName: "Ybor Bakery", contactName: "", email: "a@b.co" }), "not_found");
+});
+
+test("details: another customer's email is refused; a person shared by two customers isn't changed for both", async () => {
+  const admin = "00000000-0000-0000-0000-000000000001";
+  const other = (await db.query<{ id: string }>(`insert into app.organizations (name) values ('Cigar Shop') returning id`)).rows[0].id;
+  const u = (await db.query<{ id: string }>(`insert into app.users (email, full_name) values ('cigars@shop.test', 'Sal') returning id`)).rows[0].id;
+  await db.query(`insert into app.memberships (org_id, user_id, role) values ($1, $2, 'owner')`, [other, u]);
+  assert.equal(await updateCustomerDetails(db, admin, orgId, { businessName: "Ybor Bakery & Cafe", contactName: "Rosa Diaz", email: "CIGARS@shop.test" }), "email_taken");
+
+  // Sal also owns a second business. Changing that one's email must not change the Cigar Shop's.
+  const third = (await db.query<{ id: string }>(`insert into app.organizations (name) values ('Sal''s Lounge') returning id`)).rows[0].id;
+  await db.query(`insert into app.memberships (org_id, user_id, role) values ($1, $2, 'owner')`, [third, u]);
+  assert.equal(await updateCustomerDetails(db, admin, third, { businessName: "Sal's Lounge", contactName: "Sal", email: "lounge@shop.test" }), "ok");
+  assert.deepEqual(await owner(third), [{ email: "lounge@shop.test", full_name: "Sal" }]);
+  assert.deepEqual(await owner(other), [{ email: "cigars@shop.test", full_name: "Sal" }]);
+});

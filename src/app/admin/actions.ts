@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "@/lib/db/client";
 import { login, logout } from "@/lib/admin/auth";
-import { adjustCredits } from "@/lib/admin/queries";
+import { adjustCredits, updateCustomerDetails } from "@/lib/admin/queries";
 import { runAdminOnboardingAction, type AdminOnboardingAction } from "@/lib/admin/onboarding";
 import { adminEdit, adminRequestRevision, approveAndSend, giveUp, retryFailed } from "@/lib/articles/review";
 import { ADMIN_COOKIE, requireAdmin } from "@/lib/admin/session";
@@ -46,6 +46,18 @@ export async function adjustCreditsAction(formData: FormData): Promise<void> {
 
   const result = await adjustCredits(await getDb(), adminId, orgId, cycleId, delta, reason);
   redirect(`/admin/customers/${orgId}?adjust=${result}`);
+}
+
+export async function customerDetailsAction(formData: FormData): Promise<void> {
+  const adminId = await requireAdmin();
+  const orgId = String(formData.get("orgId") ?? "");
+  if (!UUID.test(orgId)) redirect("/admin");
+  const result = await updateCustomerDetails(await getDb(), adminId, orgId, {
+    businessName: String(formData.get("businessName") ?? ""),
+    contactName: String(formData.get("contactName") ?? ""),
+    email: String(formData.get("email") ?? ""),
+  });
+  redirect(`/admin/customers/${orgId}?details=${result}#details`);
 }
 
 export async function onboardingAction(formData: FormData): Promise<void> {

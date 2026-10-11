@@ -51,6 +51,7 @@ export function ledgerLabel(kind: string): string {
 const ACTION_LABEL: Record<string, string> = {
   "onboarding.pending": "Waiting to start onboarding",
   "credits.adjust": "Credits adjusted",
+  "customer.details_updated": "You changed their name or email",
   "admin.view_customer": "Viewed by admin",
   "billing.subscription_created": "Subscribed",
   "billing.subscription_activation": "Subscription activated",

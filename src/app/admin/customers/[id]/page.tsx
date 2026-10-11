@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db/client";
 import { getCustomer, recordAdminView } from "@/lib/admin/queries";
 import { requireAdmin } from "@/lib/admin/session";
 import { actionLabel, fmtDate, fmtDateTime, fmtDay, fmtMoney, ledgerLabel, statusLabel } from "@/lib/admin/format";
-import { adjustCreditsAction } from "../../actions";
+import { adjustCreditsAction, customerDetailsAction } from "../../actions";
 import { Topbar } from "../../topbar";
 import { getOnboardingOverview } from "@/lib/admin/onboarding";
 import { OnboardingSection } from "./onboarding-section";
@@ -19,16 +19,25 @@ const ADJUST_MESSAGES: Record<string, { kind: "ok" | "err"; text: string }> = {
   not_found: { kind: "err", text: "That billing period doesn't belong to this customer." },
 };
 
+const DETAILS_MESSAGES: Record<string, { kind: "ok" | "err"; text: string }> = {
+  ok: { kind: "ok", text: "Saved. New emails go to the updated address, and new articles use the updated business name." },
+  unchanged: { kind: "ok", text: "Nothing changed." },
+  bad_input: { kind: "err", text: "Business name needs 2 to 120 characters, and the contact name can't be over 120." },
+  bad_email: { kind: "err", text: "That email address doesn't look right." },
+  email_taken: { kind: "err", text: "That email already belongs to a different customer." },
+  not_found: { kind: "err", text: "Couldn't find this customer." },
+};
+
 export default async function CustomerPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ adjust?: string; onb?: string }>;
+  searchParams: Promise<{ adjust?: string; onb?: string; details?: string }>;
 }) {
   const adminId = await requireAdmin();
   const { id } = await params;
-  const { adjust, onb } = await searchParams;
+  const { adjust, onb, details } = await searchParams;
   if (!UUID.test(id)) notFound();
 
   const db = await getDb();
@@ -40,6 +49,8 @@ export default async function CustomerPage({
   const sub = customer.subscriptions[0];
   const openCycle = customer.cycles.find((c) => c.status === "open");
   const message = adjust ? ADJUST_MESSAGES[adjust] : undefined;
+  const detailsMsg = details ? DETAILS_MESSAGES[details] : undefined;
+  const owner = customer.people.find((p) => p.role === "owner") ?? customer.people[0];
 
   return (
     <>
@@ -79,6 +90,31 @@ export default async function CustomerPage({
             </div>
           </>
         ) : null}
+
+        <h2 id="details">Name and email</h2>
+        {detailsMsg ? <p className={`notice ${detailsMsg.kind}`}>{detailsMsg.text}</p> : null}
+        <div className="panel">
+          <form action={customerDetailsAction} className="inline">
+            <input type="hidden" name="orgId" value={customer.org.id} />
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label htmlFor="businessName">Business name</label>
+              <input id="businessName" name="businessName" required minLength={2} maxLength={120}
+                defaultValue={customer.org.name} style={{ width: "100%" }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <label htmlFor="contactName">Contact name</label>
+              <input id="contactName" name="contactName" maxLength={120}
+                defaultValue={owner?.full_name ?? ""} style={{ width: "100%" }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <label htmlFor="email">Email</label>
+              <input id="email" name="email" type="email" required maxLength={254}
+                defaultValue={owner?.email ?? ""} style={{ width: "100%" }} />
+            </div>
+            <button type="submit">Save</button>
+          </form>
+          <p className="empty" style={{ marginTop: 10 }}>This changes the app only. If they want invoices at the new address too, update it in Zoho Billing.</p>
+        </div>
 
         <OnboardingSection orgId={customer.org.id} o={onboarding} flash={onb} />
 
