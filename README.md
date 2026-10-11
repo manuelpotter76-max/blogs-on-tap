@@ -53,4 +53,4 @@ PGHOST_TEST=/var/run/postgresql npm test
 
 1. Whether `X-Zoho-Webhook-Signature` is hex or base64 (both accepted now; drop the other).
 2. The exact payload shape and event names (see the note at the top of `billing-events.ts`).
-3. That each Zoho plan code matches `app.plan_versions.zoho_plan_code` (`starter`, `growth`, `authority`).
+3. That each Zoho plan code matches `app.plan_versions.zoho_plan_code` (`starter`, `growth`, `premium`).
