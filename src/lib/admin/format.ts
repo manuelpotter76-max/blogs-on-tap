@@ -78,3 +78,10 @@ const ACTION_LABEL: Record<string, string> = {
 export function actionLabel(action: string): string {
   return ACTION_LABEL[action] ?? action;
 }
+
+/** Article job states, as the admin sees them. */
+export const STATE_LABEL: Record<string, string> = {
+  queued: "Waiting to start", drafting: "Writing", quality_review: "AI quality check", needs_revision: "AI revising",
+  admin_review: "Needs your review", ready_for_customer: "Sending", delivered: "With customer",
+  customer_revision_requested: "Customer asked for changes", customer_approved: "Approved by customer", failed: "Failed",
+};

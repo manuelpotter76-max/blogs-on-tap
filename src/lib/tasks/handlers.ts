@@ -1,7 +1,7 @@
 import type { Db, Queryable } from "@/lib/db/client";
 import { createLink, linkUrl, type LinkPurpose } from "@/lib/links";
 import { sendEmail } from "@/lib/email/send";
-import { onboardingInvite, profileReview, topicReview } from "@/lib/email/templates";
+import { articleReady, onboardingInvite, profileReview, topicReview } from "@/lib/email/templates";
 import { runBusinessResearch } from "@/lib/agents/business-research";
 import { runContentStrategy } from "@/lib/agents/content-strategy";
 import { runWebsiteFetch } from "@/lib/onboarding/website-task";
@@ -66,6 +66,34 @@ const sendTopicReview: Handler = async (db, task) => {
     to: who.email, linkId, ...mail });
 };
 
+const sendArticle: Handler = async (db, task) => {
+  const articleId = String(task.payload.article_id ?? "");
+  const version = Number(task.payload.version);
+  const a = (await db.query<{ job_id: string; topic_id: string; state: string; title: string; delivered_version: number | null }>(
+    `select a.job_id, a.topic_id, j.state, v.content->>'seo_title' as title, a.delivered_version
+       from app.articles a join app.production_jobs j on j.id = a.job_id
+       join app.article_versions v on v.article_id = a.id and v.version = $3
+      where a.id = $1 and a.org_id = $2`, [articleId, task.org_id, version])).rows[0];
+  if (!a || a.state !== "ready_for_customer") return;   // changed since it was approved
+  const who = await owner(db, task.org_id);
+  const linkId = await liveLink(db, task.org_id, "article_review", articleId);
+  const mail = articleReady(a.title, linkUrl(linkId, "article_review"), a.delivered_version !== null);
+  await sendEmail(db, { orgId: task.org_id, kind: "article_ready", dedupeKey: `article_ready:${articleId}:v${version}`,
+    to: who.email, linkId, ...mail });
+  await db.transaction(async (tx) => {
+    await tx.query(
+      `update app.articles set delivered_version = $2, delivered_at = now(), updated_at = now() where id = $1`,
+      [articleId, version]);
+    await tx.query(
+      `update app.production_jobs set state = 'delivered', step = 'customer', updated_at = now()
+        where id = $1 and state = 'ready_for_customer'`, [a.job_id]);
+    await tx.query(`update app.topics set status = 'used' where id = $1`, [a.topic_id]);
+    await tx.query(
+      `insert into app.audit_events (org_id, actor, action, target, details) values ($1, 'system', 'article.delivered', $2, $3)`,
+      [task.org_id, a.job_id, JSON.stringify({ version })]);
+  });
+};
+
 export const HANDLERS: Record<TaskKind, Handler> = {
   send_onboarding_invite: sendOnboardingInvite,
   website_fetch: (db: Db, task: Task) => runWebsiteFetch(db, task),
@@ -73,4 +101,5 @@ export const HANDLERS: Record<TaskKind, Handler> = {
   send_profile_review: sendProfileReview,
   content_strategy: (db: Db, task: Task) => runContentStrategy(db, task),
   send_topic_review: sendTopicReview,
+  send_article: sendArticle,
 };

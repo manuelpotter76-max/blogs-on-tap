@@ -140,3 +140,17 @@ button:disabled { opacity: 0.6; cursor: default; }
 .topic .meta { font-size: 13px; color: var(--muted); }
 .topic textarea { width: 100%; margin-top: 8px; }
 @media (max-width: 560px) { .item { flex-direction: column; } }
+
+/* Rendered articles (admin review and customer page) */
+.article-body { font-size: 17px; line-height: 1.7; max-width: 720px; }
+.article-body h1 { font-size: 28px; line-height: 1.25; margin: 8px 0 18px; }
+.article-body h2 { font-size: 21px; margin: 28px 0 8px; }
+.article-body h3 { font-size: 18px; margin: 22px 0 6px; }
+.article-body p, .article-body ul, .article-body ol { margin: 0 0 14px; }
+.article-body a { text-decoration: underline; }
+.article-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+.meta-list { font-size: 14px; color: var(--muted); }
+.meta-list dt { font-weight: 600; color: var(--ink); margin-top: 8px; }
+.meta-list dd { margin: 2px 0 0; }
+a.button-link { display: inline-block; font-weight: 600; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; }
+a.button-link:hover { text-decoration: none; border-color: var(--accent); }

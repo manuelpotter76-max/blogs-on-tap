@@ -6,7 +6,8 @@ export type TaskKind =
   | "business_research"
   | "send_profile_review"
   | "content_strategy"
-  | "send_topic_review";
+  | "send_topic_review"
+  | "send_article";
 
 export type Task = {
   id: string;

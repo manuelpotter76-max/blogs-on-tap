@@ -61,3 +61,16 @@ export function topicReview(count: number, url: string, round: number): EmailCon
     text: text(heading, ps, url, FOOTER),
   };
 }
+
+export function articleReady(title: string, url: string, revisedVersion: boolean): EmailContent {
+  const heading = revisedVersion ? "Your revised article is ready" : "Your new article is ready";
+  const ps = [
+    `"${title}" is ready for you.`,
+    "Open it to read it, copy it straight into your website, or download it. If anything needs changing, you can ask for edits from the same page.",
+  ];
+  return {
+    subject: revisedVersion ? `Revised: ${title}` : `New article ready: ${title}`,
+    html: layout(heading, ps, "Read your article", url, FOOTER),
+    text: text(heading, ps, url, FOOTER),
+  };
+}

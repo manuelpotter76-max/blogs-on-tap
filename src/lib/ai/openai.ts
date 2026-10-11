@@ -22,16 +22,19 @@ export type StructuredCall = {
   schema: Schema;
   sourceRefs?: unknown[];
   taskId?: string | null;
+  jobId?: string | null;
   maxOutputTokens?: number;
 };
 
 export type StructuredResult<T> = { runId: string; data: T; costUsd: number | null };
 
 /** Model choice lives in env vars so it can change without a deploy of new code. */
-export function modelFor(stage: "research" | "strategy"): string {
-  const v = (stage === "research" ? process.env.OPENAI_MODEL_RESEARCH : process.env.OPENAI_MODEL_STRATEGY)?.trim()
-    || process.env.OPENAI_MODEL_DEFAULT?.trim();
-  if (!v) throw new PermanentError(`Set OPENAI_MODEL_${stage === "research" ? "RESEARCH" : "STRATEGY"} or OPENAI_MODEL_DEFAULT`);
+export type ModelStage = "research" | "strategy" | "brief" | "writing" | "qa";
+
+export function modelFor(stage: ModelStage): string {
+  const name = `OPENAI_MODEL_${stage.toUpperCase()}`;
+  const v = process.env[name]?.trim() || process.env.OPENAI_MODEL_DEFAULT?.trim();
+  if (!v) throw new PermanentError(`Set ${name} or OPENAI_MODEL_DEFAULT`);
   return v;
 }
 
@@ -65,9 +68,10 @@ export async function callStructured<T>(db: Queryable, call: StructuredCall, fet
   if (!key) throw new PermanentError("OPENAI_API_KEY is not set");
 
   const { rows } = await db.query<{ id: string }>(
-    `insert into app.ai_runs (org_id, stage, prompt_version, model, source_refs, task_id)
-     values ($1, $2, $3, $4, $5, $6) returning id`,
-    [call.orgId, call.stage, call.promptVersion, call.model, JSON.stringify(call.sourceRefs ?? []), call.taskId ?? null]);
+    `insert into app.ai_runs (org_id, stage, prompt_version, model, source_refs, task_id, job_id)
+     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+    [call.orgId, call.stage, call.promptVersion, call.model, JSON.stringify(call.sourceRefs ?? []), call.taskId ?? null,
+     call.jobId ?? null]);
   const runId = rows[0].id;
 
   const finish = async (status: string, fields: { usage?: ResponsesApiResult["usage"]; responseId?: string; error?: string; validation?: string[] }) => {

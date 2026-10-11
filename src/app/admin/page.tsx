@@ -8,7 +8,10 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminHome() {
   await requireAdmin();
-  const customers = await listCustomers(await getDb());
+  const db = await getDb();
+  const customers = await listCustomers(db);
+  const { rows: waiting } = await db.query<{ n: number }>(
+    `select count(*)::int as n from app.production_jobs where state in ('admin_review', 'failed')`);
 
   const active = customers.filter((c) => c.status === "active" || c.status === "cancel_scheduled").length;
   const attention = customers.filter((c) => c.status === "past_due" || c.status === "suspended").length;
@@ -20,6 +23,9 @@ export default async function AdminHome() {
       <main className="wrap">
         <h1>Customers</h1>
         <p className="sub">Everyone who has subscribed, newest first.</p>
+        {waiting[0].n > 0 && (
+          <p className="notice ok"><a href="/admin/articles">{waiting[0].n} article{waiting[0].n === 1 ? "" : "s"} waiting for your review →</a></p>
+        )}
 
         <div className="stats" style={{ marginBottom: 20 }}>
           <div className="stat"><div className="label">Active</div><div className="value">{active}</div></div>
