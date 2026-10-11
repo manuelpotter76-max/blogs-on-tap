@@ -62,6 +62,18 @@ const ACTION_LABEL: Record<string, string> = {
   "billing.subscription_reactivated": "Reactivated",
   "billing.subscription_unpaid": "Payment failed",
   "billing.event_stale": "Ignored an out-of-date billing message",
+  "onboarding.submitted": "Sent in the questionnaire",
+  "onboarding.link_resent": "Onboarding link re-sent",
+  "website.fetched": "Read their website",
+  "profile.drafted": "Profile drafted by AI",
+  "profile.confirmed": "Confirmed their profile",
+  "profile.research_rerun": "Profile research re-run",
+  "strategy.drafted": "Topic ideas drafted by AI",
+  "strategy.more_requested": "More topic ideas requested",
+  "strategy.needs_admin": "Skipped every topic batch: needs a person",
+  "topics.decided": "Picked topics",
+  "task.failed": "A background step failed",
+  "task.retried": "Background step retried",
 };
 export function actionLabel(action: string): string {
   return ACTION_LABEL[action] ?? action;

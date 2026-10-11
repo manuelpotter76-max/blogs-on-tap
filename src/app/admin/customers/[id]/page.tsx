@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/admin/session";
 import { actionLabel, fmtDate, fmtDateTime, fmtDay, fmtMoney, ledgerLabel, statusLabel } from "@/lib/admin/format";
 import { adjustCreditsAction } from "../../actions";
 import { Topbar } from "../../topbar";
+import { getOnboardingOverview } from "@/lib/admin/onboarding";
+import { OnboardingSection } from "./onboarding-section";
 
 export const dynamic = "force-dynamic";
 
@@ -22,17 +24,18 @@ export default async function CustomerPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ adjust?: string }>;
+  searchParams: Promise<{ adjust?: string; onb?: string }>;
 }) {
   const adminId = await requireAdmin();
   const { id } = await params;
-  const { adjust } = await searchParams;
+  const { adjust, onb } = await searchParams;
   if (!UUID.test(id)) notFound();
 
   const db = await getDb();
   const customer = await getCustomer(db, id);
   if (!customer) notFound();
   await recordAdminView(db, adminId, id);
+  const onboarding = await getOnboardingOverview(db, id);
 
   const sub = customer.subscriptions[0];
   const openCycle = customer.cycles.find((c) => c.status === "open");
@@ -76,6 +79,8 @@ export default async function CustomerPage({
             </div>
           </>
         ) : null}
+
+        <OnboardingSection orgId={customer.org.id} o={onboarding} flash={onb} />
 
         <h2>Adjust credits</h2>
         <div className="panel">
