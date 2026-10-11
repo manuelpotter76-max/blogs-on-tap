@@ -37,11 +37,27 @@ export async function GET(request: Request): Promise<Response> {
     const jobsCreated = await scheduleJobs(db);
     const left = 60_000 - (Date.now() - started);
     const articles = left > 5_000 ? await runArticleJobs(db, { worker, deadlineMs: left }) : { steps: 0, failed: 0 };
+    if (new Date().getUTCMinutes() === 7) await housekeeping(db);
     await db.query(`insert into app.worker_heartbeats (billing_events_processed, tasks_run) values ($1, $2)`,
       [billing, tasksRun + articles.steps]);
     return Response.json({ billing_events_processed: billing, tasks, jobs_created: jobsCreated, articles });
   } catch (err) {
     console.error("worker tick failed", (err as { code?: string }).code, err);
     return new Response("worker error", { status: 500 });
+  }
+}
+
+/**
+ * Once an hour: drop records that only matter briefly. Rejected webhooks hold
+ * raw payloads with customer emails, so they are kept just long enough to debug.
+ */
+async function housekeeping(db: { query: (q: string) => Promise<unknown> }) {
+  try {
+    await db.query(`delete from app.webhook_rejections where received_at < now() - interval '14 days'`);
+    await db.query(`delete from app.worker_heartbeats where ran_at < now() - interval '14 days'`);
+    await db.query(`delete from app.admin_login_attempts where at < now() - interval '90 days'`);
+    await db.query(`delete from app.admin_sessions where expires_at < now() - interval '7 days'`);
+  } catch (err) {
+    console.error("housekeeping failed", (err as Error).message);
   }
 }

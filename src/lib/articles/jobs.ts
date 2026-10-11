@@ -8,6 +8,8 @@ import {
 } from "@/lib/agents/writing";
 import { checkArticle, normalizeArticle, type ArticleContent, type Finding } from "./content";
 import { normUrl, wordCount } from "./markdown";
+import { alertAdmin } from "@/lib/email/admin-alerts";
+import { enqueue } from "@/lib/tasks/queue";
 
 /**
  * The article pipeline. One production job = one article = one credit.
@@ -44,7 +46,36 @@ export async function scheduleJobs(db: Queryable): Promise<number> {
     const out = await db.query<{ n: number }>(`select app.ensure_jobs_for_cycle($1) as n`, [r.id]);
     created += out.rows[0]?.n ?? 0;
   }
+  await topUpTopics(db);
   return created;
+}
+
+/**
+ * Keep every paying, onboarded customer stocked with approved topics. When
+ * fewer than one cycle's worth remain, nothing is waiting on the customer and
+ * no strategy run is queued, ask the strategist for more (at most once a day).
+ * Without this, production would quietly stop once the first batch ran out.
+ */
+export async function topUpTopics(db: Queryable): Promise<number> {
+  const { rows } = await db.query<{ org_id: string }>(`
+    select cs.org_id
+      from app.content_strategies cs
+      join app.business_profiles bp on bp.org_id = cs.org_id and bp.status = 'confirmed'
+      join lateral (
+        select pv.articles_per_cycle from app.subscriptions s join app.plan_versions pv on pv.id = s.plan_version_id
+         where s.org_id = cs.org_id and s.status in ('active', 'cancel_scheduled')
+         order by s.created_at desc limit 1) plan on true
+     where cs.status = 'approved'
+       and (select count(*) from app.topics t where t.org_id = cs.org_id and t.status = 'approved') < plan.articles_per_cycle
+       and not exists (select 1 from app.topics t where t.org_id = cs.org_id and t.status = 'proposed')
+       and not exists (select 1 from app.pipeline_tasks p where p.org_id = cs.org_id and p.kind = 'content_strategy'
+                         and p.state in ('pending', 'running'))`);
+  let queued = 0;
+  const day = new Date().toISOString().slice(0, 10);
+  for (const r of rows) {
+    if (await enqueue(db, r.org_id, "content_strategy", `content_strategy:${r.org_id}:topup:${day}`)) queued++;
+  }
+  return queued;
 }
 
 // ---------------------------------------------------------------------------
@@ -220,12 +251,18 @@ async function stepQa(db: Db, ctx: Ctx, fetcher?: Fetcher) {
   if (report.passed) {
     // Passed. High-risk content (regulated fields, possible liability) still gets a flag for extra care.
     await setStep(db, ctx.job.id, "admin_review", "admin", report.high_risk ? ", flagged = true" : ", flagged = false");
+    await alertAdmin(db, { orgId: ctx.job.org_id, kind: "article_review", dedupeKey: `review:${ctx.current.id}`,
+      detail: `"${ctx.current.content.seo_title}" passed the quality check${report.high_risk ? " (flagged: read carefully)" : ""}.`,
+      path: `/admin/articles/${ctx.job.id}` });
   } else if (ctx.job.qa_rounds < MAX_QA_ROUNDS) {
     await setStep(db, ctx.job.id, "needs_revision", "revise", ", qa_rounds = qa_rounds + 1");
   } else {
     // Out of automatic tries: a person decides (acceptance test 7).
     await setStep(db, ctx.job.id, "admin_review", "admin", ", flagged = true");
     await audit(db, ctx.job.org_id, "article.qa_escalated", ctx.job.id, { version: ctx.current.version });
+    await alertAdmin(db, { orgId: ctx.job.org_id, kind: "article_review", dedupeKey: `review:${ctx.current.id}`,
+      detail: `"${ctx.current.content.seo_title}" still has quality problems after ${MAX_QA_ROUNDS} automatic revisions. It needs you.`,
+      path: `/admin/articles/${ctx.job.id}` });
   }
 }
 
@@ -278,6 +315,22 @@ export async function runArticleJobs(db: Db, opts: { worker: string; deadlineMs:
   const claimed = rows[0];
   if (!claimed) return out;
 
+  // A step that kills the function (timeout, crash) never reaches the catch
+  // below, so the claim count is the only thing that grows. Stop it here
+  // instead of paying for the same AI call every few minutes forever.
+  if (claimed.attempts > MAX_FAILED_TRIES + 1) {
+    const msg = "Stopped after repeated crashes or timeouts on this step";
+    await db.query(
+      `update app.production_jobs set state = 'failed', last_error = $2, locked_until = null, locked_by = null,
+              updated_at = now() where id = $1`, [claimed.id, msg]);
+    await audit(db, claimed.org_id, "article.failed", claimed.id, { step: claimed.step, error: msg });
+    await alertAdmin(db, { orgId: claimed.org_id, kind: "article_failed", dedupeKey: `failed:${claimed.id}:${claimed.attempts}`,
+      detail: `${msg} (${claimed.step}). The credit is still reserved. Retry or give up from the article page.`,
+      path: `/admin/articles/${claimed.id}` });
+    out.failed++;
+    return out;
+  }
+
   let job = claimed;
   try {
     while (RUNNABLE.has(job.state) && Date.now() < deadline) {
@@ -297,6 +350,9 @@ export async function runArticleJobs(db: Db, opts: { worker: string; deadlineMs:
         `update app.production_jobs set state = 'failed', last_error = $2, locked_until = null, locked_by = null,
                 updated_at = now() where id = $1`, [job.id, msg]);
       await audit(db, job.org_id, "article.failed", job.id, { step: job.step, error: msg });
+      await alertAdmin(db, { orgId: job.org_id, kind: "article_failed", dedupeKey: `failed:${job.id}:${tries}:${Date.now()}`,
+        detail: `Failed at the "${job.step}" step after ${tries} tries: ${msg}. The credit is still reserved.`,
+        path: `/admin/articles/${job.id}` });
       out.failed++;
     } else {
       await db.query(

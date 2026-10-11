@@ -54,6 +54,12 @@ export async function runTasks(
   const { rows } = await db.query<Task>(`select * from app.claim_tasks($1, $2)`, [opts.worker, opts.limit ?? 3]);
 
   for (const task of rows) {
+    if (task.attempts > task.max_attempts + 1) {
+      // Crashed or timed out the function every time: stop instead of looping.
+      await failTask(db, task, "Stopped after repeated crashes or timeouts");
+      out.failed++;
+      continue;
+    }
     if (Date.now() > deadline) {
       // Out of time this tick: hand it back untouched.
       await db.query(
@@ -73,13 +79,7 @@ export async function runTasks(
       const msg = `${e.name}: ${e.message}`.slice(0, 2000);
       console.error(`task ${task.kind} ${task.id} attempt ${task.attempts} failed:`, msg);
       if (permanent) {
-        await db.query(
-          `update app.pipeline_tasks set state = 'failed', finished_at = now(), updated_at = now(),
-                  locked_until = null, last_error = $2 where id = $1`, [task.id, msg]);
-        await db.query(
-          `insert into app.audit_events (org_id, actor, action, target, details)
-           values ($1, 'system', 'task.failed', $2, $3)`,
-          [task.org_id, task.id, JSON.stringify({ kind: task.kind, error: msg })]);
+        await failTask(db, task, msg);
         out.failed++;
       } else {
         const wait = BACKOFF_SECONDS[Math.min(task.attempts - 1, BACKOFF_SECONDS.length - 1)];
@@ -92,6 +92,19 @@ export async function runTasks(
     }
   }
   return out;
+}
+
+async function failTask(db: Db, task: Task, msg: string) {
+  await db.query(
+    `update app.pipeline_tasks set state = 'failed', finished_at = now(), updated_at = now(),
+            locked_until = null, last_error = $2 where id = $1`, [task.id, msg]);
+  await db.query(
+    `insert into app.audit_events (org_id, actor, action, target, details)
+     values ($1, 'system', 'task.failed', $2, $3)`,
+    [task.org_id, task.id, JSON.stringify({ kind: task.kind, error: msg })]);
+  const { alertAdmin } = await import("@/lib/email/admin-alerts");
+  await alertAdmin(db, { orgId: task.org_id, kind: "task_failed", dedupeKey: `task_failed:${task.id}:${task.attempts}`,
+    detail: `"${task.kind}" failed: ${msg}. Retry it from the customer's page.`, path: `/admin/customers/${task.org_id}#onboarding` });
 }
 
 /** Admin: put a failed task back in the queue with a fresh set of attempts. */

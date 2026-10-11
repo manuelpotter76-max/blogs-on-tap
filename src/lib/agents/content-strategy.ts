@@ -4,6 +4,7 @@ import { callStructured, modelFor, type Fetcher } from "@/lib/ai/openai";
 import { enqueue, PermanentError, type Task } from "@/lib/tasks/queue";
 import type { BusinessProfile } from "./business-profile";
 import { filterFresh, topicKey, type Known } from "./dedupe";
+import { alertAdmin } from "@/lib/email/admin-alerts";
 
 /** Agent B: Content Strategy. Bump PROMPT_VERSION whenever the instructions change. */
 export const PROMPT_VERSION = "content_strategy.v1";
@@ -101,6 +102,9 @@ export async function runContentStrategy(db: Db, task: Task, fetcher?: Fetcher):
     await db.query(
       `insert into app.audit_events (org_id, actor, action, target, details) values ($1, 'system', 'strategy.needs_admin', $2, '{}')`,
       [orgId, orgId]);
+    await alertAdmin(db, { orgId, kind: "strategy_needs_admin", dedupeKey: `strategy_needs_admin:${orgId}:${round}`,
+      detail: `They skipped every topic in ${MAX_REVIEW_ROUNDS} batches. Talk to them, then use "Draft more topics".`,
+      path: `/admin/customers/${orgId}#onboarding` });
     return;
   }
 

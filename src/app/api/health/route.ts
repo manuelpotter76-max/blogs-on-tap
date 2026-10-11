@@ -8,11 +8,23 @@ export const dynamic = "force-dynamic";
  * secret values, so it is safe to open in a browser.
  */
 export async function GET(): Promise<Response> {
+  const env = (k: string) => Boolean(process.env[k]?.trim());
+  const provider = (process.env.EMAIL_PROVIDER ?? "log").trim();
   const settings = {
-    DATABASE_URL: Boolean(process.env.DATABASE_URL),
-    CRON_SECRET: Boolean(process.env.CRON_SECRET),
-    ZOHO_BILLING_WEBHOOK_SECRET: Boolean(process.env.ZOHO_BILLING_WEBHOOK_SECRET),
+    DATABASE_URL: env("DATABASE_URL"),
+    CRON_SECRET: env("CRON_SECRET"),
+    ZOHO_BILLING_WEBHOOK_SECRET: env("ZOHO_BILLING_WEBHOOK_SECRET"),
+    APP_BASE_URL: env("APP_BASE_URL"),
+    LINK_SECRET: (process.env.LINK_SECRET?.trim().length ?? 0) >= 32,
+    OPENAI_API_KEY: env("OPENAI_API_KEY"),
+    OPENAI_MODEL: env("OPENAI_MODEL_DEFAULT") || (env("OPENAI_MODEL_RESEARCH") && env("OPENAI_MODEL_STRATEGY")
+      && env("OPENAI_MODEL_BRIEF") && env("OPENAI_MODEL_WRITING") && env("OPENAI_MODEL_QA")),
+    SUPABASE_STORAGE: env("SUPABASE_URL") && env("SUPABASE_SECRET_KEY"),
+    EMAIL: provider === "log" || (provider === "zeptomail" && env("ZEPTOMAIL_TOKEN") && env("EMAIL_FROM")),
   };
+  const notes: string[] = [];
+  if (provider === "log") notes.push("EMAIL_PROVIDER is 'log': customer emails are not really sent; copy links from /admin.");
+  if (!env("ADMIN_EMAIL")) notes.push("ADMIN_EMAIL is not set: you won't get alerts about reviews and failures.");
 
   let database: { ok: boolean; problem?: string; code?: string } = { ok: false, problem: "DATABASE_URL is missing" };
   if (settings.DATABASE_URL) {
@@ -28,12 +40,20 @@ export async function GET(): Promise<Response> {
   }
 
   const lastHeartbeat = database.ok ? await lastTick() : null;
-  const allGood = Object.values(settings).every(Boolean) && database.ok;
+  const timerOk = !!lastHeartbeat && Date.now() - new Date(lastHeartbeat).getTime() < 5 * 60_000;
+  const work = database.ok ? await workQueues() : null;
+  if (work?.unprocessed_billing_events) notes.push("Some Zoho billing events could not be applied: check app.billing_events.");
+  if (work?.failed_articles || work?.failed_steps) notes.push("Something failed: see /admin/articles and the customer pages.");
+  if (database.ok && !work?.ai_prices) notes.push("No rows in app.ai_model_prices: AI cost shows as unknown.");
+  const allGood = Object.values(settings).every(Boolean) && database.ok && timerOk;
   return Response.json({
     all_good: allGood,
     settings,
     database,
     last_successful_timer_run: lastHeartbeat,
+    timer_ok: timerOk,
+    work,
+    notes,
     // One-way fingerprints let us confirm a secret matches without revealing it.
     fingerprints: {
       ZOHO_BILLING_WEBHOOK_SECRET: await fingerprint(process.env.ZOHO_BILLING_WEBHOOK_SECRET),
@@ -51,6 +71,24 @@ async function fingerprint(value: string | undefined) {
     length: trimmed.length,
     had_extra_spaces: trimmed.length !== value.length,
   };
+}
+
+/** Counts only: nothing about any customer. */
+async function workQueues() {
+  try {
+    const db = await getDb();
+    const { rows } = await db.query<Record<string, number>>(`
+      select (select count(*)::int from app.billing_events where processed_at is null and received_at < now() - interval '5 minutes') as unprocessed_billing_events,
+             (select count(*)::int from app.pipeline_tasks where state = 'failed') as failed_steps,
+             (select count(*)::int from app.pipeline_tasks where state = 'pending' and run_after < now() - interval '15 minutes') as overdue_steps,
+             (select count(*)::int from app.production_jobs where state = 'failed') as failed_articles,
+             (select count(*)::int from app.production_jobs where state = 'admin_review') as articles_awaiting_review,
+             (select count(*)::int from app.notifications where status in ('failed', 'uncertain')) as emails_needing_attention,
+             (select count(*)::int from app.ai_model_prices) as ai_prices`);
+    return rows[0];
+  } catch {
+    return null;
+  }
 }
 
 async function lastTick(): Promise<string | null> {
