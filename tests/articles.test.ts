@@ -295,3 +295,43 @@ test("code checks catch prohibited claims, placeholders and thin articles", () =
     { minWords: 800, maxWords: 1200, profile, allowedLinks: [] }).map((x) => x.code);
   for (const code of ["prohibited_claim", "placeholder", "too_short", "meta_missing"]) assert.ok(f.includes(code), code);
 });
+
+test("code checks catch writer notes leaking into the article, and tables", () => {
+  const f = checkArticle(article({ markdown: article().markdown + "\n\nThere is no confirmed standard turnaround to quote for this business.\n\n| a | b |\n|---|---|" }),
+    { minWords: 800, maxWords: 1200, profile, allowedLinks: [] }).map((x) => x.code);
+  assert.ok(f.includes("internal_note"));
+  assert.ok(f.includes("table"));
+  const clean = checkArticle(article(), { minWords: 800, maxWords: 1200, profile, allowedLinks: [] }).map((x) => x.code);
+  assert.ok(!clean.includes("internal_note"), "normal text isn't flagged");
+});
+
+test("the topic pool tops itself up before it runs dry, once a day", async () => {
+  const { topUpTopics } = await import("../src/lib/articles/jobs");
+  await db.query(`update app.topics set status = 'used' where org_id = $1 and status in ('approved', 'in_production')`, [orgId]);
+  await db.query(`update app.subscriptions set status = 'active' where org_id = $1`, [orgId]);
+  await db.query(`delete from app.pipeline_tasks where org_id = $1 and kind = 'content_strategy'`, [orgId]);
+  assert.equal(await topUpTopics(db), 1);
+  assert.equal(await topUpTopics(db), 0, "already queued");
+  await scheduleJobs(db);   // the scheduler calls it too; still just one
+  assert.equal(await n(`select count(*)::int n from app.pipeline_tasks where org_id = $1 and kind = 'content_strategy' and dedupe_key like '%:topup:%'`, [orgId]), 1);
+});
+
+test("admin gets one alert per article ready for review, and alerts never block work", async () => {
+  process.env.ADMIN_EMAIL = "owner@blogsontap.test";
+  const { alertAdmin } = await import("../src/lib/email/admin-alerts");
+  await alertAdmin(db, { orgId, kind: "article_review", dedupeKey: "review:x", detail: "d", path: "/admin/articles/x" });
+  await alertAdmin(db, { orgId, kind: "article_review", dedupeKey: "review:x", detail: "d", path: "/admin/articles/x" });
+  assert.equal(await n(`select count(*)::int n from app.notifications where to_email = 'owner@blogsontap.test'`), 1);
+  await alertAdmin(db, { orgId: "00000000-0000-0000-0000-000000000000", kind: "task_failed", dedupeKey: "bad", detail: "d", path: "/" });
+  delete process.env.ADMIN_EMAIL;
+});
+
+test("a job that keeps crashing the worker is stopped instead of retried forever", async () => {
+  const job = await one<{ id: string }>(`select id from app.production_jobs where org_id = $1 and state = 'admin_review' limit 1`, [orgId]);
+  await db.query(`update app.production_jobs set state = 'drafting', step = 'draft', attempts = 9, run_after = now() - interval '1 minute', locked_until = null where id = $1`, [job.id]);
+  const before = prompts.length;
+  const r = await work();
+  assert.equal(r.failed, 1);
+  assert.equal(prompts.length, before, "no AI call made");
+  assert.equal((await one<{ state: string }>(`select state from app.production_jobs where id = $1`, [job.id])).state, "failed");
+});

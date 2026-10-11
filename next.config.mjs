@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  poweredByHeader: false,
   experimental: {
     // Onboarding uploads (up to 4 MB each) go through a server action.
     serverActions: { bodySizeLimit: "5mb" },

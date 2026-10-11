@@ -6,9 +6,9 @@ import { ARTICLE_SCHEMA, type ArticleContent } from "@/lib/articles/content";
  * Agents for Phase 4. Bump a PROMPT_VERSION whenever its instructions change;
  * every AI run records which version produced it.
  */
-export const BRIEF_VERSION = "article_brief.v1";
-export const WRITER_VERSION = "article_writer.v1";
-export const QA_VERSION = "quality_review.v1";
+export const BRIEF_VERSION = "article_brief.v2";
+export const WRITER_VERSION = "article_writer.v2";
+export const QA_VERSION = "quality_review.v2";
 export { ARTICLE_SCHEMA };
 
 // ---------------------------------------------------------------------------
@@ -82,7 +82,8 @@ Rules:
 - Don't overlap the OTHER ARTICLES listed. Give this one its own job.
 - Links: only URLs from ALLOWED LINKS. If none fit, plan none.
 - Keep the call to action honest and natural, never pushy.
-- Regulated fields (legal, medical, financial): general education only, no individual advice; note what to avoid.`;
+- Regulated fields (legal, medical, financial): general education only, no individual advice; note what to avoid.
+- Plan for plain prose, headings and lists only. No tables, images, charts or embeds: they can't be delivered.`;
 
 export function briefInput(o: {
   profile: BusinessProfile; topic: TopicRow; links: AllowedLink[]; others: string[]; minWords: number; maxWords: number;
@@ -108,6 +109,7 @@ Content rules:
 - Never make a PROHIBITED CLAIM. Never use AVOID TERMS. Use PREFERRED TERMS where they fit.
 - Regulated fields: educational only, suggest consulting a qualified professional, no individual advice.
 - Write for people, not search engines. Use the primary keyword naturally in the intro and a heading or two; never stuff it.
+- The reader is the business's customer. Never mention the profile, the brief, sources, or what is or isn't "confirmed" or "verified". If you don't know a specific (a timeline, a price, a policy), speak generally or tell the reader to ask the business; never explain that the information is missing.
 
 Style rules:
 - Match the profile's tone and style notes. Plain words, short paragraphs, active voice.
@@ -115,7 +117,7 @@ Style rules:
 - Use ## for sections and ### for subsections. Lists only where they genuinely help.
 
 Format rules:
-- markdown: the body only. Start with a short intro paragraph. No title line, no HTML, no images, no tables.
+- markdown: the body only. Start with a short intro paragraph. No title line, no HTML, no images, no tables (if the brief asks for a table, use a short list instead).
 - Links: only URLs from ALLOWED LINKS, written as [anchor](url). No other links at all.
 - End with the call to action woven into a short closing section.
 - source_notes: list every specific claim about the business and where it came from, so an editor can check it.`;
@@ -195,6 +197,7 @@ Check:
 - Structure, SEO and CTA: clear sections, natural keyword use, accurate title and meta, a fitting call to action near the end.
 - Repetition: substantially repeats one of the OTHER ARTICLES.
 - Compliance: regulated topics must stay general and educational.
+- Internal language: any sentence that talks about what is confirmed, verified, documented, in the profile, or not known to the writer is a major issue. Readers must never see the writer's notes to itself.
 
 Severity: blocker = must not publish (false or risky claims, prohibited content). major = clearly hurts quality. minor = polish.
 Be specific: quote the problem text and say exactly how to fix it.`;

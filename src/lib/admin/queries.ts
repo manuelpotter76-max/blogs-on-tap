@@ -29,6 +29,7 @@ export async function listCustomers(db: Db): Promise<CustomerRow[]> {
       ) s on true
       left join app.plan_versions pv on pv.id = s.plan_version_id
       left join app.plans p on p.id = pv.plan_id
+     where o.status <> 'archived'
      order by o.created_at desc`);
   return rows;
 }

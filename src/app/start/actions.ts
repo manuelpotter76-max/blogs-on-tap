@@ -63,6 +63,7 @@ export async function uploadAction(token: string, form: FormData): Promise<Uploa
 }
 
 export async function removeFileAction(token: string, docId: string): Promise<ActionResult> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(docId))) return { ok: false, error: "Couldn't find that file." };
   const orgId = await orgFor(token);
   if (!orgId) return { ok: false, error: EXPIRED };
   const db = await getDb();

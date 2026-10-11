@@ -78,6 +78,7 @@ export function normalizeArticle(c: ArticleContent, allowedLinks: string[]): { c
 }
 
 const PLACEHOLDER = /\[(insert|add|your|company|business name|city)[^\]]*\]|lorem ipsum|\bTODO\b|\{\{|\}\}|XX+/i;
+const INTERNAL_NOTE = /\b(no|not|isn't|is not|wasn't|was not|un)[ -]?(been )?(confirmed|verified|documented)\b[^.\n]{0,60}|\b(according to|per|based on) (the|our|your) (profile|brief|source notes?)\b|\b(in|from) the (business )?profile\b|\bthe brief\b/i;
 const RAW_HTML = /<\/?(script|iframe|div|span|style|img|object|embed|form|input|a)\b/i;
 
 export function checkArticle(c: ArticleContent, ctx: CheckContext, removedLinks: string[] = []): Finding[] {
@@ -99,6 +100,9 @@ export function checkArticle(c: ArticleContent, ctx: CheckContext, removedLinks:
 
   if (RAW_HTML.test(c.markdown)) f.push({ code: "raw_html", severity: "error", message: "Contains HTML tags; articles must be plain Markdown." });
   if (PLACEHOLDER.test(c.markdown)) f.push({ code: "placeholder", severity: "error", message: "Contains placeholder text." });
+  const internal = c.markdown.match(INTERNAL_NOTE);
+  if (internal) f.push({ code: "internal_note", severity: "error", message: `Talks to the editor instead of the reader: "${internal[0]}". Remove it or speak generally.` });
+  if (/^\s*\|.*\|\s*$/m.test(c.markdown)) f.push({ code: "table", severity: "error", message: "Contains a table, which won't display. Use a list instead." });
 
   for (const claim of ctx.profile.prohibited_claims) {
     const k = claim.toLowerCase().replace(/^(never|don't|do not)\s+(say|claim|promise)\s+/i, "").replace(/['"]/g, "").trim();
