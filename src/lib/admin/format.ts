@@ -79,6 +79,7 @@ const ACTION_LABEL: Record<string, string> = {
   "article.approved": "You approved an article",
   "billing.returning_customer": "Returning customer, new subscription",
   "task.failed": "A background step failed",
+  "article.cannot_write": "The AI couldn't write an article from what it knows",
   "task.retried": "Background step retried",
 };
 export function actionLabel(action: string): string {

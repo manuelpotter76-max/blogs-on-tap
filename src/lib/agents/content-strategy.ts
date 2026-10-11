@@ -7,7 +7,7 @@ import { filterFresh, topicKey, type Known } from "./dedupe";
 import { alertAdmin } from "@/lib/email/admin-alerts";
 
 /** Agent B: Content Strategy. Bump PROMPT_VERSION whenever the instructions change. */
-export const PROMPT_VERSION = "content_strategy.v1";
+export const PROMPT_VERSION = "content_strategy.v2";
 export const MAX_REVIEW_ROUNDS = 4;
 
 const TOPIC: Schema = obj({
@@ -48,6 +48,7 @@ Rules:
 - Do not invent search volumes, rankings, keyword difficulty or statistics. Do not promise results.
 - Regulated fields (legal, medical, financial): keep topics educational and general, never individual advice.
 - Titles: clear, specific and honest. No clickbait, no "ultimate guide" cliches, no colons stacked with buzzwords.
+- Every topic must be writable from the profile plus widely known general knowledge. Don't propose topics that depend on facts we don't have, like rankings or reviews of named restaurants, shops or other businesses, prices, hours, event dates or quotes, unless the profile supplies them.
 - Return exactly the number of topics requested, ordered by priority.`;
 
 function profileText(p: BusinessProfile): string {

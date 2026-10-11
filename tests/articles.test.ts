@@ -335,3 +335,53 @@ test("a job that keeps crashing the worker is stopped instead of retried forever
   assert.equal(prompts.length, before, "no AI call made");
   assert.equal((await one<{ state: string }>(`select state from app.production_jobs where id = $1`, [job.id])).state, "failed");
 });
+
+test("a blank or refused draft stops right away with the writer's reason, and retry re-plans from scratch", async () => {
+  const admin = "00000000-0000-0000-0000-000000000001";
+  // Clear the board: one fresh topic and one fresh credit.
+  for (const j of (await db.query<{ id: string }>(`select id from app.production_jobs where org_id = $1 and state in ('admin_review', 'failed')`, [orgId])).rows) {
+    await giveUp(db, admin, j.id, false);
+  }
+  await db.query(`update app.topics set status = 'retired' where org_id = $1 and status = 'approved'`, [orgId]);
+  const sv = await one<{ id: string }>(`select id from app.strategy_versions where org_id = $1 limit 1`, [orgId]);
+  await db.query(
+    `insert into app.topics (org_id, strategy_version_id, topic_key, title, primary_keyword, search_intent, audience,
+                             business_objective, angle, cta, priority, status)
+     values ($1, $2, 'best-plumbers', 'Best Plumbers in Tampa, Ranked', 'best plumbers tampa', 'commercial', 'homeowners', 'leads', 'ranking', 'Call us', 1, 'approved')`,
+    [orgId, sv.id]);
+  assert.equal(await scheduleJobs(db), 1);
+
+  // The writer refuses (a note to the editor, no title). No automatic revisions should follow.
+  queue.article.push(article({ seo_title: "", meta_description: "", excerpt: "", cta: "",
+    markdown: "Please send the plumber-level reporting before I draft this ranking.",
+    source_notes: [{ claim: "EDITORIAL HOLD: needs reporting", source: "brief" }] }));
+  const before = prompts.length;
+  await work();
+  const job = await jobByTopic("Best Plumbers in Tampa, Ranked");
+  assert.equal(job.state, "failed");
+  assert.equal(job.step, "brief", "retry starts over from planning");
+  assert.equal(prompts.length - before, 2, "brief + draft only, no QA or revision loop");
+  const err = (await one<{ last_error: string }>(`select last_error from app.production_jobs where id = $1`, [job.id])).last_error;
+  assert.match(err, /couldn't write this topic[\s\S]*plumber-level reporting/);
+  assert.equal(await n(`select count(*)::int n from app.article_briefs where job_id = $1`, [job.id]), 0);
+  assert.equal(await n(`select count(*)::int n from app.articles a join app.article_versions v on v.article_id = a.id where a.job_id = $1`, [job.id]), 0,
+    "the blank draft isn't saved as a version");
+  assert.equal(await n(`select count(*)::int n from app.audit_events where action = 'article.cannot_write' and target = $1`, [job.id]), 1);
+  assert.deepEqual((await db.query<{ kind: string }>(`select kind from app.entitlement_ledger where job_id = $1`, [job.id])).rows.map((r) => r.kind),
+    ["reserve"], "credit still reserved");
+
+  // Retry: a new brief, a real draft, and on to review.
+  assert.equal(await retryFailed(db, admin, job.id), "ok");
+  await work();
+  const done = await jobByTopic("Best Plumbers in Tampa, Ranked");
+  assert.equal(done.state, "admin_review");
+  assert.equal(await n(`select count(*)::int n from app.article_briefs where job_id = $1`, [job.id]), 1);
+});
+
+test("blank-draft detector: real articles pass, stubs and empties don't", async () => {
+  const { blankDraftNote } = await import("../src/lib/articles/jobs");
+  assert.equal(blankDraftNote(article(), 800), null);
+  assert.equal(blankDraftNote(article({ markdown: "" , seo_title: "", source_notes: [] }), 800), "It returned an empty article.");
+  assert.equal(blankDraftNote(article({ seo_title: "" }), 800), null, "a full article missing only its title goes through normal revision");
+  assert.ok(blankDraftNote(article({ markdown: "Short.\n\n## One\n\nToo short to publish." }), 800));
+});

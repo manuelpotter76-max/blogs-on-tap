@@ -204,6 +204,36 @@ async function saveVersion(db: Db, ctx: Ctx, raw: ArticleContent, createdBy: str
   });
 }
 
+/**
+ * The writer handed back no real article: an empty body, a note to the editor,
+ * or a stub. Returns the writer's own explanation, or null if the draft is real.
+ */
+export function blankDraftNote(c: ArticleContent, minWords: number): string | null {
+  const words = wordCount(c.markdown ?? "");
+  if (words >= Math.max(150, Math.round(minWords * 0.4))) return null;
+  const note = [c.markdown ?? "", ...(c.source_notes ?? []).map((n) => n.claim)]
+    .join(" ").replace(/[#*_>`]/g, "").replace(/\s+/g, " ").trim();
+  return note ? (note.length > 400 ? `${note.slice(0, 400)}...` : note) : "It returned an empty article.";
+}
+
+/**
+ * Stop instead of looping: blank drafts don't get better with automatic
+ * revisions, they just cost money. The admin sees the writer's reason and can
+ * retry (a blank first draft re-plans from scratch) or give up.
+ */
+async function stopBlank(db: Db, ctx: Ctx, note: string, stage: "draft" | "revise") {
+  const replan = stage === "draft";
+  if (replan) await db.query(`delete from app.article_briefs where job_id = $1`, [ctx.job.id]);
+  const msg = `The AI couldn't write this topic from what we know about the business. Its note: ${note}`.slice(0, 2000);
+  await db.query(
+    `update app.production_jobs set state = 'failed', step = $2, last_error = $3, locked_until = null, locked_by = null,
+            updated_at = now() where id = $1`, [ctx.job.id, replan ? "brief" : "revise", msg]);
+  await audit(db, ctx.job.org_id, "article.cannot_write", ctx.job.id, { stage, note });
+  await alertAdmin(db, { orgId: ctx.job.org_id, kind: "article_failed", dedupeKey: `blank:${ctx.job.id}:${Date.now()}`,
+    detail: `"${ctx.topic.title}": ${msg} The credit is still reserved. Retry or give up from the article page.`,
+    path: `/admin/articles/${ctx.job.id}` });
+}
+
 async function stepDraft(db: Db, ctx: Ctx, fetcher?: Fetcher) {
   if (!ctx.current) {
     if (!ctx.brief) throw new Error("no brief");
@@ -213,6 +243,8 @@ async function stepDraft(db: Db, ctx: Ctx, fetcher?: Fetcher) {
       input: [{ type: "input_text", text: writerInput({ ...ctx, brief: ctx.brief }) }],
       sourceRefs: [{ kind: "topic", id: ctx.topic.id }], maxOutputTokens: 20_000,
     }, fetcher);
+    const blank = blankDraftNote(r.data, ctx.minWords);
+    if (blank) return stopBlank(db, ctx, blank, "draft");
     await saveVersion(db, ctx, r.data, "ai", r.runId);
   }
   await setStep(db, ctx.job.id, "quality_review", "qa");
@@ -288,6 +320,8 @@ async function stepRevise(db: Db, ctx: Ctx, fetcher?: Fetcher) {
     input: [{ type: "input_text", text: revisionInput(base, ctx.current.content, changes) }],
     sourceRefs: [{ kind: "article_version", id: ctx.current.id }], maxOutputTokens: 20_000,
   }, fetcher);
+  const blank = blankDraftNote(r.data, ctx.minWords);
+  if (blank) return stopBlank(db, ctx, blank, "revise");
   const v = await saveVersion(db, ctx, r.data, "ai_revision", r.runId);
   if (requests.length) {
     await db.query(

@@ -21,7 +21,7 @@ export const AUTO_APPROVED = "auto_approved";
 export async function listArticleJobs(db: Db, f: ArticleFilters = {}): Promise<ArticleJobRow[]> {
   const { rows } = await db.query<ArticleJobRow>(`
     select * from (
-      select j.id as job_id, j.org_id, o.name as customer, t.title as topic, v.content->>'seo_title' as title,
+      select j.id as job_id, j.org_id, o.name as customer, t.title as topic, nullif(trim(v.content->>'seo_title'), '') as title,
              j.state, j.flagged, j.last_error, j.updated_at, a.current_version as version,
              (select sum(r.cost_usd)::text from app.ai_runs r where r.job_id = j.id) as cost_usd,
              (aa.target is not null) as auto_approved

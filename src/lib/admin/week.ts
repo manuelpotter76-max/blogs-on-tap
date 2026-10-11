@@ -13,7 +13,7 @@ export async function getWeek(db: Db): Promise<Week> {
   const [review, failedJobs, failedTasks, badEmails, needsAdmin, stuck,
          onboarding, profiles, topics, delivered, renewals, ending] = await Promise.all([
     q<WeekItem>(`select j.org_id, o.name as customer,
-                        'Review: ' || coalesce(v.content->>'seo_title', t.title) || case when j.flagged then ' (flagged)' else '' end as what,
+                        'Review: ' || coalesce(nullif(trim(v.content->>'seo_title'), ''), t.title, 'untitled') || case when j.flagged then ' (flagged)' else '' end as what,
                         j.updated_at::text as when, '/admin/articles/' || j.id as href
                    from app.production_jobs j join app.organizations o on o.id = j.org_id
                    left join app.topics t on t.id = j.topic_id
@@ -65,7 +65,7 @@ export async function getWeek(db: Db): Promise<Week> {
                    from app.topics t join app.organizations o on o.id = t.org_id
                   where t.status = 'proposed' group by t.org_id, o.name`),
     q<WeekItem>(`select a.org_id, o.name as customer,
-                        'Reading "' || (v.content->>'seo_title') || '" (auto-approves ' ||
+                        'Reading "' || coalesce(nullif(trim(v.content->>'seo_title'), ''), 'an article') || '" (auto-approves ' ||
                           to_char((a.delivered_at + make_interval(days => pv.revision_window_days)) at time zone 'America/New_York', 'Mon DD') || ')' as what,
                         a.delivered_at::text as when, '/admin/articles/' || a.job_id as href
                    from app.articles a
