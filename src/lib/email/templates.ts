@@ -10,9 +10,9 @@ function layout(heading: string, paragraphs: string[], button: string, url: stri
   const ps = paragraphs.map((p) => `<p style="margin:0 0 14px">${esc(p)}</p>`).join("");
   return `<!doctype html><html><body style="margin:0;background:#f7f6f3;font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#1d1d1b">
 <div style="max-width:560px;margin:0 auto;padding:32px 20px">
-<p style="font-weight:700;margin:0 0 24px">Blogs <span style="color:#b5522b">on Tap</span></p>
+<p style="font-weight:700;margin:0 0 24px">Blogs <span style="color:#6d4856">on Tap</span></p>
 <h1 style="font-size:20px;margin:0 0 16px">${esc(heading)}</h1>${ps}
-<p style="margin:24px 0"><a href="${esc(url)}" style="background:#b5522b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">${esc(button)}</a></p>
+<p style="margin:24px 0"><a href="${esc(url)}" style="background:#6d4856;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">${esc(button)}</a></p>
 <p style="color:#6b6a66;font-size:13px;margin:0">${esc(footer)}</p>
 </div></body></html>`;
 }

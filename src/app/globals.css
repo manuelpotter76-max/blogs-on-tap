@@ -4,7 +4,7 @@
   --ink: #1d1d1b;
   --muted: #6b6a66;
   --line: #e6e3dc;
-  --accent: #b5522b;
+  --accent: #6d4856;
   --accent-ink: #ffffff;
   --good: #2f7d4f;
   --warn: #a8701a;
@@ -98,7 +98,7 @@ textarea { font: inherit; padding: 8px 10px; border: 1px solid var(--line); bord
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line);
   border-radius: 999px; font-size: 14px; font-weight: 500 !important; color: var(--ink); cursor: pointer; background: #fff; }
-.chip.on { border-color: var(--accent); background: #fbf1ec; }
+.chip.on { border-color: var(--accent); background: #f4eef1; }
 .chip input { margin: 0; }
 .nav { display: flex; justify-content: space-between; gap: 12px; margin-top: 24px; }
 button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
