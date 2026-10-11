@@ -76,8 +76,8 @@ export async function getOnboardingOverview(db: Db, orgId: string): Promise<Onbo
 
 async function audit(db: Queryable, orgId: string, adminId: string, action: string, details: object = {}) {
   await db.query(
-    `insert into app.audit_events (org_id, actor, action, target, details) values ($1, $2, $3, $1, $4)`,
-    [orgId, `admin:${adminId}`, action, JSON.stringify(details)]);
+    `insert into app.audit_events (org_id, actor, action, target, details) values ($1, $2, $3, $4, $5)`,
+    [orgId, `admin:${adminId}`, action, orgId, JSON.stringify(details)]);
 }
 
 export type AdminOnboardingAction = "resend_invite" | "rerun_research" | "more_topics" | "retry_task";

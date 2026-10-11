@@ -101,8 +101,8 @@ export async function submitOnboarding(db: Db, orgId: string, rawAnswers: unknow
        on conflict (org_id) do update set status = 'researching', updated_at = now()`, [orgId]);
     await tx.query(
       `insert into app.audit_events (org_id, actor, action, target, details)
-       values ($1, 'customer', 'onboarding.submitted', $1, $2)`,
-      [orgId, JSON.stringify({ website_consent: rows[0].website_consent })]);
+       values ($1, 'customer', 'onboarding.submitted', $2, $3)`,
+      [orgId, orgId, JSON.stringify({ website_consent: rows[0].website_consent })]);
 
     if (rows[0].website_consent) await enqueue(tx, orgId, "website_fetch", `website_fetch:${orgId}:1`);
     else await enqueue(tx, orgId, "business_research", `business_research:${orgId}:1`);
