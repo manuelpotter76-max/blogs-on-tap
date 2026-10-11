@@ -29,6 +29,7 @@ export class PsqlDb implements Db {
   private buf = "";
   private waiters: Array<(chunk: string) => void> = [];
   private chain: Promise<unknown> = Promise.resolve();
+  private prepared = 0;
 
   constructor(private database: string) {
     this.proc = spawn(PSQL, ["-X", "-q", "-A", "-t", "-h", HOST, "-U", "postgres", "-d", database,
@@ -65,6 +66,14 @@ export class PsqlDb implements Db {
   }
 
   async query<T>(text: string, params: unknown[] = []): Promise<{ rows: T[] }> {
+    if (params.length && !RAW.test(text)) {
+      // Production sends untyped bind parameters (node-postgres). Prepare the
+      // statement the same way so Postgres infers parameter types exactly as it
+      // will live, and type conflicts fail here instead of in production.
+      const name = `__typecheck_${++this.prepared}`;
+      await this.run(`prepare ${name} as ${text.trim()}`);
+      await this.run(`deallocate ${name}`);
+    }
     const sql = inline(text.trim(), params);
     const dmlWithoutReturning = /^\s*(insert|update|delete)\b/i.test(sql) && !/\breturning\b/i.test(sql);
     if (RAW.test(sql) || dmlWithoutReturning) {

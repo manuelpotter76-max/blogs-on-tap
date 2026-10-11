@@ -99,8 +99,8 @@ export async function runContentStrategy(db: Db, task: Task, fetcher?: Fetcher):
     await db.query(
       `update app.content_strategies set status = 'needs_admin', updated_at = now() where org_id = $1`, [orgId]);
     await db.query(
-      `insert into app.audit_events (org_id, actor, action, target, details) values ($1, 'system', 'strategy.needs_admin', $1, '{}')`,
-      [orgId]);
+      `insert into app.audit_events (org_id, actor, action, target, details) values ($1, 'system', 'strategy.needs_admin', $2, '{}')`,
+      [orgId, orgId]);
     return;
   }
 
