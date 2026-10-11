@@ -154,3 +154,13 @@ button:disabled { opacity: 0.6; cursor: default; }
 .meta-list dd { margin: 2px 0 0; }
 a.button-link { display: inline-block; font-weight: 600; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; }
 a.button-link:hover { text-decoration: none; border-color: var(--accent); }
+
+/* Admin "this week" */
+.week { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.week-col { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.week-col.urgent { border-color: var(--warn); box-shadow: inset 3px 0 0 var(--warn); }
+.week-col h3 { margin: 0 0 10px; font-size: 15px; }
+.week-col ul { list-style: none; margin: 0; padding: 0; }
+.week-col li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.week-col li:first-child { border-top: 0; padding-top: 0; }
+.week-col .muted { font-size: 12px; }

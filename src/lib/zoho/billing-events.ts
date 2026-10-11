@@ -21,6 +21,7 @@ export type ZohoEvent = {
   event_id: string;
   event_type: string;
   event_time?: string;
+  created_time?: string;      // full timestamp, e.g. "2026-10-10T23:58:48-0500"
   data?: { subscription?: ZohoSubscription };
 };
 
@@ -31,6 +32,7 @@ type ZohoSubscription = {
   customer?: { customer_id?: string; display_name?: string; company_name?: string; email?: string };
   current_term_starts_at?: string;
   current_term_ends_at?: string;
+  updated_time?: string;
 };
 
 type InternalStatus =
@@ -62,6 +64,18 @@ const GRANT_EVENTS = new Set([
 ]);
 
 export const GRACE_DAYS = 7;
+
+/**
+ * When the event happened, as precisely as Zoho tells us. event_time is only a
+ * date ("2026-10-10"), which can't order two events on the same day (cancel,
+ * then reactivate), so prefer the full created/updated timestamps.
+ */
+export function eventTimestamp(e: ZohoEvent): string {
+  for (const t of [e.created_time, e.data?.subscription?.updated_time, e.event_time]) {
+    if (t && !Number.isNaN(new Date(t).getTime())) return new Date(t).toISOString();
+  }
+  return new Date().toISOString();
+}
 
 /** Used for Zoho's newer default payload, which carries no event name. */
 export const STATE_SNAPSHOT_EVENT = "subscription_state";
@@ -155,7 +169,7 @@ async function applyEvent(tx: Queryable, event: ZohoEvent): Promise<void> {
     [`zoho_customer:${zsub.customer?.customer_id ?? zsub.subscription_id}`]);
 
   const planVersionId = await findPlanVersion(tx, zsub.plan?.plan_code);
-  const eventTime = event.event_time ?? new Date().toISOString();
+  const eventTime = eventTimestamp(event);
   let sub = await findSubscription(tx, zsub.subscription_id);
 
   if (!sub) {

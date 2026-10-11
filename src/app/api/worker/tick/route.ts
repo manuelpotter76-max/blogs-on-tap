@@ -3,6 +3,7 @@ import { processPendingBillingEvents } from "@/lib/zoho/billing-events";
 import { runTasks } from "@/lib/tasks/queue";
 import { HANDLERS } from "@/lib/tasks/handlers";
 import { runArticleJobs, scheduleJobs } from "@/lib/articles/jobs";
+import { autoApproveArticles, remindAboutArticles } from "@/lib/articles/lifecycle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +36,8 @@ export async function GET(request: Request): Promise<Response> {
     const tasks = await runTasks(db, HANDLERS, { worker, limit: 2, deadlineMs: 60_000 });
     const tasksRun = tasks.done + tasks.retried + tasks.failed;
     const jobsCreated = await scheduleJobs(db);
+    await remindAboutArticles(db);
+    await autoApproveArticles(db);
     const left = 60_000 - (Date.now() - started);
     const articles = left > 5_000 ? await runArticleJobs(db, { worker, deadlineMs: left }) : { steps: 0, failed: 0 };
     if (new Date().getUTCMinutes() === 7) await housekeeping(db);
