@@ -108,3 +108,93 @@ export async function adjustCredits(
     return "ok" as const;
   });
 }
+
+export type DetailsResult = "ok" | "bad_input" | "bad_email" | "email_taken" | "not_found" | "unchanged";
+
+const EMAIL = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[a-z]{2,}$/i;
+
+/**
+ * Admin edit of a customer's business name, contact name and email.
+ * - Business name also goes into the business profile, so new articles use it.
+ * - Email changes the owner's login/notification address. If the owner is also
+ *   on another customer's account, or has no account yet, a separate person
+ *   record is used so the other customer isn't changed by accident.
+ * Billing (Zoho) is not touched; invoices keep going to the address in Zoho.
+ */
+export async function updateCustomerDetails(
+  db: Db, adminId: string, orgId: string,
+  input: { businessName: string; contactName: string; email: string },
+): Promise<DetailsResult> {
+  const businessName = input.businessName.trim().replace(/\s+/g, " ");
+  const contactName = input.contactName.trim().replace(/\s+/g, " ");
+  const email = input.email.trim().toLowerCase();
+  if (businessName.length < 2 || businessName.length > 120 || contactName.length > 120) return "bad_input";
+  if (email.length > 254 || !EMAIL.test(email)) return "bad_email";
+  const actor = `admin:${adminId}`;
+
+  return db.transaction(async (tx) => {
+    const org = (await tx.query<{ name: string }>(
+      `select name from app.organizations where id = $1 for update`, [orgId])).rows[0];
+    if (!org) return "not_found" as const;
+    const owner = (await tx.query<{ user_id: string; email: string; full_name: string | null; orgs: number }>(
+      `select u.id as user_id, u.email, u.full_name,
+              (select count(*)::int from app.memberships m2 where m2.user_id = u.id) as orgs
+         from app.memberships m join app.users u on u.id = m.user_id
+        where m.org_id = $1 order by (m.role = 'owner') desc, m.created_at limit 1 for update of u`, [orgId])).rows[0];
+
+    const changes: Record<string, { from: string | null; to: string }> = {};
+
+    if (businessName !== org.name) {
+      await tx.query(`update app.organizations set name = $2 where id = $1`, [orgId, businessName]);
+      changes.business_name = { from: org.name, to: businessName };
+      // Keep the business profile in step so new articles use the new name.
+      const prof = (await tx.query<{ version: number; data: Record<string, unknown> }>(
+        `select pv.version, pv.data from app.business_profiles bp
+           join app.profile_versions pv on pv.org_id = bp.org_id and pv.version = bp.current_version
+          where bp.org_id = $1 for update of bp`, [orgId])).rows[0];
+      if (prof && prof.data.business_name !== businessName) {
+        const version = prof.version + 1;
+        await tx.query(
+          `insert into app.profile_versions (org_id, version, data, created_by) values ($1, $2, $3, $4)`,
+          [orgId, version, JSON.stringify({ ...prof.data, business_name: businessName }), actor]);
+        await tx.query(`update app.business_profiles set current_version = $2, updated_at = now() where org_id = $1`,
+          [orgId, version]);
+      }
+    }
+
+    const emailChanged = !owner || owner.email.toLowerCase() !== email;
+    const nameChanged = (owner?.full_name ?? "") !== contactName;
+    if (emailChanged || nameChanged) {
+      const other = emailChanged ? (await tx.query<{ id: string }>(
+        `select id from app.users where lower(email) = $1`, [email])).rows[0] : undefined;
+      if (other) {
+        // Someone else already uses this address. Allow it only if they aren't tied to a different customer.
+        const elsewhere = (await tx.query<{ n: number }>(
+          `select count(*)::int as n from app.memberships where user_id = $1 and org_id <> $2`, [other.id, orgId])).rows[0].n;
+        if (elsewhere > 0) return "email_taken" as const;
+      }
+      if (owner && !other && owner.orgs === 1) {
+        // The simple case: this person only belongs to this customer. Change them in place.
+        await tx.query(`update app.users set email = $2, full_name = nullif($3, '') where id = $1`,
+          [owner.user_id, email, contactName]);
+      } else {
+        // Point this customer at a person record for the new address (new, or an unattached existing one).
+        const userId = other?.id ?? (await tx.query<{ id: string }>(
+          `insert into app.users (email, full_name) values ($1, nullif($2, '')) returning id`, [email, contactName])).rows[0].id;
+        if (other) await tx.query(`update app.users set full_name = nullif($2, '') where id = $1`, [userId, contactName]);
+        if (owner) await tx.query(`delete from app.memberships where org_id = $1 and user_id = $2`, [orgId, owner.user_id]);
+        await tx.query(
+          `insert into app.memberships (org_id, user_id, role) values ($1, $2, 'owner')
+           on conflict (org_id, user_id) do update set role = 'owner'`, [orgId, userId]);
+      }
+      if (emailChanged) changes.email = { from: owner?.email ?? null, to: email };
+      if (nameChanged) changes.contact_name = { from: owner?.full_name ?? null, to: contactName };
+    }
+
+    if (Object.keys(changes).length === 0) return "unchanged" as const;
+    await tx.query(
+      `insert into app.audit_events (org_id, actor, action, target, details) values ($1, $2, 'customer.details_updated', $3, $4)`,
+      [orgId, actor, orgId, JSON.stringify(changes)]);
+    return "ok" as const;
+  });
+}
