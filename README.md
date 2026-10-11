@@ -49,8 +49,10 @@ npm install
 PGHOST_TEST=/var/run/postgresql npm test
 ```
 
-## Before going live, confirm with a real Zoho test webhook
+## Zoho Billing webhook: confirmed with a live test (Oct 10, 2026)
 
-1. Whether `X-Zoho-Webhook-Signature` is hex or base64 (both accepted now; drop the other).
-2. The exact payload shape and event names (see the note at the top of `billing-events.ts`).
-3. That each Zoho plan code matches `app.plan_versions.zoho_plan_code` (`starter`, `growth`, `premium`).
+- Signature: HMAC-SHA256 of the raw JSON body with the webhook secret, hex encoded, in `X-Zoho-Webhook-Signature`.
+- Payload: Zoho's previous format (`event_id`, `event_type`, `data.subscription`). The webhook is set to it via "restore it".
+  The newer format (no event details) is also accepted, as a state snapshot.
+- Plan codes in Zoho: `starter`, `growth`, `premium`.
+- Rejected webhooks are written to `app.webhook_rejections` for diagnosis; purge it after debugging.
