@@ -29,8 +29,28 @@ export async function GET(): Promise<Response> {
 
   const lastHeartbeat = database.ok ? await lastTick() : null;
   const allGood = Object.values(settings).every(Boolean) && database.ok;
-  return Response.json({ all_good: allGood, settings, database, last_successful_timer_run: lastHeartbeat },
-    { status: allGood ? 200 : 503 });
+  return Response.json({
+    all_good: allGood,
+    settings,
+    database,
+    last_successful_timer_run: lastHeartbeat,
+    // One-way fingerprints let us confirm a secret matches without revealing it.
+    fingerprints: {
+      ZOHO_BILLING_WEBHOOK_SECRET: await fingerprint(process.env.ZOHO_BILLING_WEBHOOK_SECRET),
+      CRON_SECRET: await fingerprint(process.env.CRON_SECRET),
+    },
+  }, { status: allGood ? 200 : 503 });
+}
+
+async function fingerprint(value: string | undefined) {
+  if (!value) return null;
+  const { createHash } = await import("node:crypto");
+  const trimmed = value.trim();
+  return {
+    hash: createHash("sha256").update(trimmed).digest("hex").slice(0, 8),
+    length: trimmed.length,
+    had_extra_spaces: trimmed.length !== value.length,
+  };
 }
 
 async function lastTick(): Promise<string | null> {

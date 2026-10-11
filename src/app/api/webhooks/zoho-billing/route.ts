@@ -25,7 +25,7 @@ export async function POST(request: Request): Promise<Response> {
   const signature = request.headers.get("x-zoho-webhook-signature");
 
   const ok = verifyZohoSignature({
-    secret: process.env.ZOHO_BILLING_WEBHOOK_SECRET ?? "",
+    secret: (process.env.ZOHO_BILLING_WEBHOOK_SECRET ?? "").trim(),
     signatureHeader: signature,
     query: url.searchParams,
     contentType,
