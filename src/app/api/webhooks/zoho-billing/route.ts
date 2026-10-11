@@ -1,7 +1,12 @@
 import { after } from "next/server";
 import { getDb } from "@/lib/db/client";
 import { verifyZohoSignature } from "@/lib/zoho/verify-signature";
-import { storeBillingEvent, processPendingBillingEvents, type ZohoEvent } from "@/lib/zoho/billing-events";
+import {
+  storeBillingEvent,
+  processPendingBillingEvents,
+  normalizeZohoPayload,
+  type ZohoEvent,
+} from "@/lib/zoho/billing-events";
 
 export const runtime = "nodejs";
 
@@ -27,9 +32,10 @@ export async function POST(request: Request): Promise<Response> {
 
   let event: ZohoEvent;
   try {
-    event = JSON.parse(rawBody);
-  } catch {
-    return new Response("expected JSON body", { status: 400 });
+    event = await normalizeZohoPayload(JSON.parse(rawBody), rawBody);
+  } catch (err) {
+    console.error("zoho webhook: unreadable payload", (err as Error).message);
+    return new Response("unrecognized payload", { status: 400 });
   }
 
   const db = await getDb();

@@ -62,6 +62,38 @@ const GRANT_EVENTS = new Set([
 
 export const GRACE_DAYS = 7;
 
+/** Used for Zoho's newer default payload, which carries no event name. */
+export const STATE_SNAPSHOT_EVENT = "subscription_state";
+
+/**
+ * Accepts both Zoho Billing payload formats and returns one shape.
+ *
+ * - Previous format: { event_id, event_type, event_time, data: { subscription } }
+ * - Newer default:   { subscription: { ... } }  (no event id or event name)
+ *
+ * For the newer format the event id is a hash of the exact body, so an
+ * identical redelivery is still stored only once, and the event is treated as
+ * a state snapshot: status decides everything, and credits are granted when
+ * the subscription is active (granting is idempotent per billing term).
+ */
+export async function normalizeZohoPayload(raw: unknown, rawBody: string): Promise<ZohoEvent> {
+  const body = (raw ?? {}) as Record<string, unknown>;
+  if (typeof body.event_id === "string" || typeof body.event_id === "number") {
+    return { ...(body as ZohoEvent), event_id: String(body.event_id) };
+  }
+  const sub = body.subscription as (ZohoSubscription & { updated_time?: string; created_time?: string }) | undefined;
+  if (sub?.subscription_id) {
+    const { createHash } = await import("node:crypto");
+    return {
+      event_id: "body:" + createHash("sha256").update(rawBody).digest("hex"),
+      event_type: STATE_SNAPSHOT_EVENT,
+      event_time: sub.updated_time ?? sub.created_time,
+      data: { subscription: sub },
+    };
+  }
+  throw new Error("Unrecognized Zoho payload: no event_id and no subscription");
+}
+
 export async function storeBillingEvent(db: Db, event: ZohoEvent): Promise<"stored" | "duplicate"> {
   if (!event?.event_id || !event?.event_type) throw new Error("event_id and event_type are required");
   const { rows } = await db.query<{ id: string }>(
@@ -161,7 +193,8 @@ async function applyEvent(tx: Queryable, event: ZohoEvent): Promise<void> {
     if (upgradedFrom) await applyMidCycleUpgrade(tx, sub.id, upgradedFrom, planVersionId);
   }
 
-  if (status === "active" && GRANT_EVENTS.has(event.event_type) &&
+  const grantable = GRANT_EVENTS.has(event.event_type) || event.event_type === STATE_SNAPSHOT_EVENT;
+  if (status === "active" && grantable &&
       zsub.current_term_starts_at && zsub.current_term_ends_at) {
     await openPaidCycle(tx, sub.id, zsub.current_term_starts_at, zsub.current_term_ends_at);
   }
