@@ -3,11 +3,13 @@ import { listCustomers } from "@/lib/admin/queries";
 import { requireAdmin } from "@/lib/admin/session";
 import { fmtDate, fmtDay, statusLabel } from "@/lib/admin/format";
 import { Topbar } from "./topbar";
+import { testEmailAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminHome() {
+export default async function AdminHome({ searchParams }: { searchParams: Promise<{ email?: string }> }) {
   await requireAdmin();
+  const { email } = await searchParams;
   const db = await getDb();
   const customers = await listCustomers(db);
   const { rows: waiting } = await db.query<{ n: number }>(
@@ -23,6 +25,7 @@ export default async function AdminHome() {
       <main className="wrap">
         <h1>Customers</h1>
         <p className="sub">Everyone who has subscribed, newest first.</p>
+        {email && <p className={`notice ${email.startsWith("Sent") ? "ok" : "err"}`}>{email}</p>}
         {waiting[0].n > 0 && (
           <p className="notice ok"><a href="/admin/articles">{waiting[0].n} article{waiting[0].n === 1 ? "" : "s"} waiting for your review →</a></p>
         )}
@@ -66,6 +69,9 @@ export default async function AdminHome() {
             </table>
           )}
         </div>
+        <form action={testEmailAction} style={{ marginTop: 24 }}>
+          <button type="submit" className="ghost">Send test email to {process.env.ADMIN_EMAIL ?? "admin"}</button>
+        </form>
       </main>
     </>
   );

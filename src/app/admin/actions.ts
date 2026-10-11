@@ -8,6 +8,7 @@ import { adjustCredits } from "@/lib/admin/queries";
 import { runAdminOnboardingAction, type AdminOnboardingAction } from "@/lib/admin/onboarding";
 import { adminEdit, adminRequestRevision, approveAndSend, giveUp, retryFailed } from "@/lib/articles/review";
 import { ADMIN_COOKIE, requireAdmin } from "@/lib/admin/session";
+import { sendDirect } from "@/lib/email/send";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -92,4 +93,22 @@ export async function articleAction(formData: FormData): Promise<void> {
       result = "invalid";
   }
   redirect(`/admin/articles/${jobId}?done=${action}&result=${result}`);
+}
+
+export async function testEmailAction(): Promise<void> {
+  await requireAdmin();
+  const to = process.env.ADMIN_EMAIL?.trim();
+  if (!to) redirect("/admin?email=" + encodeURIComponent("Set ADMIN_EMAIL first."));
+  let msg: string;
+  try {
+    const r = await sendDirect(to!, "Blogs on Tap test email",
+      "This is a test from your Blogs on Tap admin. If you're reading it, customer emails work.",
+      "<p>This is a test from your Blogs on Tap admin.</p><p>If you're reading it, customer emails work.</p>");
+    msg = r.provider === "log"
+      ? "Email is in log mode, so nothing was really sent. Set EMAIL_PROVIDER to zeptomail."
+      : `Sent to ${to}. Check your inbox (and spam) in a minute.`;
+  } catch (e) {
+    msg = `Failed: ${(e as Error).message.slice(0, 300)}`;
+  }
+  redirect("/admin?email=" + encodeURIComponent(msg));
 }

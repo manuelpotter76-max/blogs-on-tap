@@ -74,6 +74,16 @@ const zeptomail: Provider = {
   },
 };
 
+/**
+ * Send one message straight through the provider, with no record or dedupe.
+ * Only for the admin's "send test email" button.
+ */
+export async function sendDirect(to: string, subject: string, text: string, html: string): Promise<{ provider: string; messageId: string | null }> {
+  const p = provider();
+  const messageId = await p.send({ orgId: "", kind: "test", dedupeKey: "", to, subject, text, html });
+  return { provider: p.name, messageId };
+}
+
 export async function sendEmail(db: Queryable, m: OutboundEmail): Promise<SendResult> {
   const p = provider();
   const { rows } = await db.query<{ id: string }>(
