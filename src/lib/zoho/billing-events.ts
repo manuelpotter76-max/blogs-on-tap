@@ -1,4 +1,5 @@
 import type { Db, Queryable } from "../db/client";
+import { enqueue } from "../tasks/queue";
 
 /**
  * Turns verified Zoho Billing webhooks into subscription state and credits.
@@ -168,7 +169,7 @@ async function applyEvent(tx: Queryable, event: ZohoEvent): Promise<void> {
        values ('zoho_billing', 'subscription', $1, $2, $3) on conflict do nothing`,
       [zsub.subscription_id, orgId, sub.id],
     );
-    // Phase 3 picks this up and sends the onboarding link exactly once.
+    // The invite itself is queued below once the subscription is paid (active).
     await audit(tx, orgId, "onboarding.pending", sub.id, {});
   } else if (sub.last_event_at && new Date(eventTime) < new Date(sub.last_event_at)) {
     // Out-of-order delivery: an older event must not roll state backwards.
@@ -202,6 +203,11 @@ async function applyEvent(tx: Queryable, event: ZohoEvent): Promise<void> {
   if (status === "active" && grantable &&
       zsub.current_term_starts_at && zsub.current_term_ends_at) {
     await openPaidCycle(tx, sub.id, zsub.current_term_starts_at, zsub.current_term_ends_at);
+  }
+
+  if (status === "active") {
+    // First time we see a paid subscription: send the onboarding link, once per customer, ever.
+    await enqueue(tx, sub.org_id, "send_onboarding_invite", `send_onboarding_invite:${sub.org_id}`);
   }
 
   await audit(tx, sub.org_id, `billing.${event.event_type}`, sub.id, { zoho_status: zsub.status, status });

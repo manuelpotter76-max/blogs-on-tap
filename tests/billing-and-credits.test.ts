@@ -2,6 +2,7 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { freshDatabase } from "./helpers/psql-db";
 import { asTenant } from "../src/lib/db/client";
+import { makeReady } from "./helpers/ready";
 import { storeBillingEvent, processPendingBillingEvents, type ZohoEvent } from "../src/lib/zoho/billing-events";
 
 const db = freshDatabase("bot_billing_test");
@@ -72,6 +73,13 @@ test("test 2: replayed webhooks change nothing", async () => {
             (select count(*)::int from app.entitlement_ledger where kind = 'grant') grants,
             (select count(*)::int from app.audit_events where action = 'onboarding.pending') onboard`);
   assert.deepEqual(counts, { orgs: 1, subs: 1, cycles: 1, grants: 1, onboard: 1 });
+});
+
+test("tests 3 and 4: no jobs until onboarding is done and topics are approved", async () => {
+  const { cycle_id } = await openCycle("sub_A");
+  assert.equal(await ensureJobs(cycle_id), 0, "paid, but no confirmed profile or approved topics yet");
+  const org = await one<{ org_id: string }>(`select org_id from app.subscriptions where zoho_subscription_id = 'sub_A'`);
+  await makeReady(db, org.org_id);
 });
 
 test("test 5: a 4-article plan cannot get a 5th job", async () => {

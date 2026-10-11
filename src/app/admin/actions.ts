@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/lib/db/client";
 import { login, logout } from "@/lib/admin/auth";
 import { adjustCredits } from "@/lib/admin/queries";
+import { runAdminOnboardingAction, type AdminOnboardingAction } from "@/lib/admin/onboarding";
 import { ADMIN_COOKIE, requireAdmin } from "@/lib/admin/session";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -43,4 +44,15 @@ export async function adjustCreditsAction(formData: FormData): Promise<void> {
 
   const result = await adjustCredits(await getDb(), adminId, orgId, cycleId, delta, reason);
   redirect(`/admin/customers/${orgId}?adjust=${result}`);
+}
+
+export async function onboardingAction(formData: FormData): Promise<void> {
+  const adminId = await requireAdmin();
+  const orgId = String(formData.get("orgId") ?? "");
+  const action = String(formData.get("action") ?? "") as AdminOnboardingAction;
+  const taskId = String(formData.get("taskId") ?? "") || undefined;
+  if (!UUID.test(orgId) || (taskId && !UUID.test(taskId))) redirect("/admin");
+  if (!["resend_invite", "rerun_research", "more_topics", "retry_task"].includes(action)) redirect(`/admin/customers/${orgId}`);
+  const result = await runAdminOnboardingAction(await getDb(), adminId, orgId, action, taskId);
+  redirect(`/admin/customers/${orgId}?onb=${result}#onboarding`);
 }
