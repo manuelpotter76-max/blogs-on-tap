@@ -9,6 +9,7 @@ import { runAdminOnboardingAction, type AdminOnboardingAction } from "@/lib/admi
 import { adminEdit, adminRequestRevision, approveAndSend, giveUp, retryFailed } from "@/lib/articles/review";
 import { ADMIN_COOKIE, requireAdmin } from "@/lib/admin/session";
 import { sendDirect } from "@/lib/email/send";
+import { sendAccountSetup } from "@/lib/customer/auth";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -123,4 +124,12 @@ export async function testEmailAction(): Promise<void> {
     msg = `Failed: ${(e as Error).message.slice(0, 300)}`;
   }
   redirect("/admin?email=" + encodeURIComponent(msg));
+}
+
+export async function sendLoginSetupAction(formData: FormData): Promise<void> {
+  const adminId = await requireAdmin();
+  const orgId = String(formData.get("orgId") ?? "");
+  if (!UUID.test(orgId)) redirect("/admin");
+  const result = await sendAccountSetup(await getDb(), adminId, orgId);
+  redirect(`/admin/customers/${orgId}?login=${result}#login`);
 }

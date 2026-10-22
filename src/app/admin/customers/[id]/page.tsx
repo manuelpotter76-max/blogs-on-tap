@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db/client";
 import { getCustomer, recordAdminView } from "@/lib/admin/queries";
 import { requireAdmin } from "@/lib/admin/session";
 import { actionLabel, fmtDate, fmtDateTime, fmtDay, fmtMoney, ledgerLabel, statusLabel } from "@/lib/admin/format";
-import { adjustCreditsAction, customerDetailsAction } from "../../actions";
+import { adjustCreditsAction, customerDetailsAction, sendLoginSetupAction } from "../../actions";
 import { Topbar } from "../../topbar";
 import { getOnboardingOverview } from "@/lib/admin/onboarding";
 import { OnboardingSection } from "./onboarding-section";
@@ -17,6 +17,12 @@ const ADJUST_MESSAGES: Record<string, { kind: "ok" | "err"; text: string }> = {
   bad_input: { kind: "err", text: "Use a whole number between -20 and 20 (not 0), and a reason of at least 5 characters." },
   would_go_negative: { kind: "err", text: "That would leave fewer than 0 articles for this month." },
   not_found: { kind: "err", text: "That billing period doesn't belong to this customer." },
+};
+
+const LOGIN_MESSAGES: Record<string, { kind: "ok" | "err"; text: string }> = {
+  sent: { kind: "ok", text: "Login setup email sent. The link works once, for 7 days." },
+  already_set: { kind: "err", text: "They already have a login. If they're stuck, they can use \"Forgot your password?\" on the sign-in page." },
+  no_owner: { kind: "err", text: "This customer has no contact email to send it to. Add one under Name and email first." },
 };
 
 const DETAILS_MESSAGES: Record<string, { kind: "ok" | "err"; text: string }> = {
@@ -33,11 +39,11 @@ export default async function CustomerPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ adjust?: string; onb?: string; details?: string }>;
+  searchParams: Promise<{ adjust?: string; onb?: string; details?: string; login?: string }>;
 }) {
   const adminId = await requireAdmin();
   const { id } = await params;
-  const { adjust, onb, details } = await searchParams;
+  const { adjust, onb, details, login } = await searchParams;
   if (!UUID.test(id)) notFound();
 
   const db = await getDb();
@@ -59,7 +65,7 @@ export default async function CustomerPage({
         <p style={{ margin: "0 0 8px" }}><a href="/admin">← All customers</a></p>
         <h1>{customer.org.name}</h1>
         <p className="sub">
-          {customer.people.map((p) => p.email).join(", ") || "No contact email"} · Customer since {fmtDate(customer.org.created_at)}
+          {owner?.email ?? "No contact email"} · Customer since {fmtDate(customer.org.created_at)}
         </p>
 
         {message ? <p className={`notice ${message.kind}`}>{message.text}</p> : null}
@@ -114,6 +120,33 @@ export default async function CustomerPage({
             <button type="submit">Save</button>
           </form>
           <p className="empty" style={{ marginTop: 10 }}>This changes the app only. If they want invoices at the new address too, update it in Zoho Billing.</p>
+        </div>
+
+        <h2 id="login">Dashboard logins</h2>
+        {login && LOGIN_MESSAGES[login] ? <p className={`notice ${LOGIN_MESSAGES[login].kind}`}>{LOGIN_MESSAGES[login].text}</p> : null}
+        <div className="panel">
+          <table>
+            <thead><tr><th>Person</th><th>Role</th><th>Login</th><th>Last sign-in</th></tr></thead>
+            <tbody>
+              {customer.people.map((p) => (
+                <tr key={p.user_id}>
+                  <td>{p.email}</td>
+                  <td>{p.role === "owner" ? "Owner" : "Teammate"}</td>
+                  <td>{p.status === "invited" ? "Invited, not joined yet"
+                    : p.login_ready_at ? "Set up"
+                    : p.last_sign_in_at ? "Signed in with an email link" : "Not set up"}</td>
+                  <td>{p.last_sign_in_at ? fmtDateTime(p.last_sign_in_at) : "Never"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {owner && !owner.login_ready_at ? (
+            <form action={sendLoginSetupAction} className="inline">
+              <input type="hidden" name="orgId" value={customer.org.id} />
+              <button type="submit">Send login setup email</button>
+              <span className="muted" style={{ alignSelf: "center", fontSize: 13 }}>Goes to {owner.email}. Works once, for 7 days.</span>
+            </form>
+          ) : null}
         </div>
 
         <OnboardingSection orgId={customer.org.id} o={onboarding} flash={onb} />

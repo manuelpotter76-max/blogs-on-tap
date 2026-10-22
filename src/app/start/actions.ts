@@ -1,9 +1,12 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { getDb } from "@/lib/db/client";
 import { resolveLink } from "@/lib/links";
 import { OnboardingClosed, saveProgress, submitOnboarding } from "@/lib/onboarding/store";
 import { removeUpload, saveUpload } from "@/lib/uploads/storage";
+import { setUpOwnerLogin } from "@/lib/customer/auth";
+import { requestInfo, setSessionCookie } from "@/lib/customer/session";
 
 export type ActionResult = { ok: true } | { ok: false; error: string; step?: number; closed?: boolean };
 
@@ -71,4 +74,21 @@ export async function removeFileAction(token: string, docId: string): Promise<Ac
   if (done.rows.length) return { ok: false, error: "You've already sent this in." };
   await removeUpload(db, orgId, String(docId));
   return { ok: true };
+}
+
+/** First-time login setup, shown before the questionnaire on the welcome link. */
+export async function setupLoginAction(token: string, form: FormData): Promise<void> {
+  const back = `/start/${encodeURIComponent(token)}`;
+  const db = await getDb();
+  const link = await resolveLink(db, token, "onboarding");
+  if (!link) redirect(back);
+  const password = String(form.get("password") ?? "");
+  if (password !== String(form.get("confirm") ?? "")) redirect(`${back}?setup=mismatch`);
+  const { userAgent } = await requestInfo();
+  const r = await setUpOwnerLogin(db, link.org_id, password, userAgent);
+  if (!r.ok) {
+    redirect(r.reason === "bad_password" ? `${back}?setup=weak&msg=${encodeURIComponent(r.message ?? "")}` : back);
+  }
+  await setSessionCookie(r.token, r.expiresAt);
+  redirect(`${back}?setup=done`);
 }
