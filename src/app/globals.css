@@ -188,7 +188,7 @@ a.button-link:hover { text-decoration: none; border-color: var(--accent); }
 .todo a.go { flex-shrink: 0; font-weight: 600; padding: 8px 14px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); }
 .todo a.go:hover { text-decoration: none; opacity: 0.92; }
 .mini-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
-.mini-stats div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.mini-stats > div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .mini-stats .label { font-size: 12px; color: var(--muted); }
 .mini-stats .value { font-size: 18px; font-weight: 700; }
 .list-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
