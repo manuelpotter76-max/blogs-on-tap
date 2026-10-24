@@ -22,6 +22,7 @@ const TEAM: Record<string, { ok: boolean; text: string }> = {
   too_many: { ok: false, text: `You can have up to ${MAX_TEAMMATES} teammates. Remove one first, or reply to any of our emails if you need more.` },
   not_owner: { ok: false, text: "Only the account owner can change the team." },
   not_found: { ok: false, text: "Couldn't find that person." },
+  email_failed: { ok: false, text: "We couldn't send the invite email just now. Please try again in a few minutes." },
 };
 
 const when = (iso: string | null) => iso

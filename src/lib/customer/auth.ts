@@ -318,27 +318,45 @@ export async function requestEmailLink(db: Queryable, emailIn: string, purpose: 
   if (await recentLinks(db, user.id) >= MAX_LINKS_PER_EMAIL) return "skipped";
   const link = await createLoginLink(db, user.id, orgId, purpose);
   const mail = purpose === "sign_in" ? signInLink(link.url) : passwordReset(link.url);
-  await sendEmail(db, { orgId, kind: `login_${purpose}`, dedupeKey: `login:${link.id}`, to: user.email, ...mail });
+  try {
+    await sendEmail(db, { orgId, kind: `login_${purpose}`, dedupeKey: `login:${link.id}`, to: user.email, ...mail });
+  } catch (err) {
+    // The page says the same thing either way (so it can't be used to find accounts);
+    // the failure is recorded on the notification and shows in admin.
+    console.error(`login email (${purpose}) failed:`, (err as Error).message);
+    return "skipped";
+  }
   return "sent";
 }
 
 /** Admin button: email the owner a link to set up their login. */
-export async function sendAccountSetup(db: Queryable, adminId: string, orgId: string): Promise<"sent" | "no_owner" | "already_set"> {
+export async function sendAccountSetup(db: Queryable, adminId: string, orgId: string): Promise<"sent" | "no_owner" | "already_set" | "email_failed"> {
   const owner = await ownerOf(db, orgId);
   if (!owner) return "no_owner";
   if (owner.login_ready_at) return "already_set";
   const org = (await db.query<{ name: string }>(`select name from app.organizations where id = $1`, [orgId])).rows[0];
   const link = await createLoginLink(db, owner.id, orgId, "account_setup");
-  await sendEmail(db, { orgId, kind: "login_account_setup", dedupeKey: `login:${link.id}`, to: owner.email,
-    ...accountSetup(org.name, link.url) });
+  try {
+    await sendEmail(db, { orgId, kind: "login_account_setup", dedupeKey: `login:${link.id}`, to: owner.email,
+      ...accountSetup(org.name, link.url) });
+  } catch (err) {
+    console.error("login setup email failed:", (err as Error).message);
+    await db.query(`update app.login_links set used_at = now() where id = $1`, [link.id]);
+    return "email_failed";
+  }
   await audit(db, orgId, `admin:${adminId}`, "login.setup_sent", { to: owner.email });
   return "sent";
 }
 
 export async function notifyPasswordChanged(db: Queryable, userId: string, orgId: string) {
   const u = (await db.query<{ email: string }>(`select email from app.users where id = $1`, [userId])).rows[0];
-  await sendEmail(db, { orgId, kind: "login_password_changed", dedupeKey: `pwchanged:${userId}:${Date.now()}`,
-    to: u.email, ...passwordChanged(`${baseUrl()}/dashboard`) });
+  try {
+    await sendEmail(db, { orgId, kind: "login_password_changed", dedupeKey: `pwchanged:${userId}:${Date.now()}`,
+      to: u.email, ...passwordChanged(`${baseUrl()}/dashboard`) });
+  } catch (err) {
+    // A heads-up email failing must never undo or block the password change.
+    console.error("password changed email failed:", (err as Error).message);
+  }
 }
 
 /**
@@ -428,7 +446,7 @@ export async function listTeam(db: Queryable, orgId: string): Promise<Teammate[]
       where m.org_id = $1 order by (m.role = 'owner') desc, m.created_at`, [orgId])).rows;
 }
 
-export type InviteResult = "sent" | "bad_email" | "already_member" | "too_many" | "not_owner";
+export type InviteResult = "sent" | "bad_email" | "already_member" | "too_many" | "not_owner" | "email_failed";
 
 /** The owner invites someone by email. They get a link to set up their login (or just join, if they have one). */
 export async function inviteTeammate(db: Db, s: Pick<CustomerSession, "userId" | "orgId" | "role" | "fullName" | "email" | "orgName">, emailIn: string, nameIn: string): Promise<InviteResult> {
@@ -453,8 +471,13 @@ export async function inviteTeammate(db: Db, s: Pick<CustomerSession, "userId" |
   });
   if (out.r !== "sent") return out.r;
   const inviter = s.fullName?.trim() || s.email;
-  await sendEmail(db, { orgId: s.orgId, kind: "team_invite", dedupeKey: `login:${out.link.id}`, to: email,
-    ...teammateInvite(inviter, s.orgName, out.link.url) });
+  try {
+    await sendEmail(db, { orgId: s.orgId, kind: "team_invite", dedupeKey: `login:${out.link.id}`, to: email,
+      ...teammateInvite(inviter, s.orgName, out.link.url) });
+  } catch (err) {
+    console.error("invite email failed:", (err as Error).message);
+    return "email_failed";
+  }
   return "sent";
 }
 
