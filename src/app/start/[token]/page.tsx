@@ -35,7 +35,7 @@ export default async function StartPage({ params, searchParams }: {
   if (owner && !owner.login_ready_at && signedIn?.orgId !== link.org_id) {
     const error = sp.setup === "weak" ? (sp.msg || "Pick a stronger password.") : sp.setup ? SETUP_ERRORS[sp.setup] : null;
     return (
-      <CustomerShell>
+      <CustomerShell nav={false}>
         <section className="card auth">
           <p className="step-count" style={{ marginTop: 0 }}>Step 1 of 2</p>
           <h1>Set up your login</h1>

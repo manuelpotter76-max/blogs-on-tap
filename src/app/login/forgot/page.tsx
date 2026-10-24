@@ -7,7 +7,7 @@ export const metadata = { title: "Reset your password | Blogs on Tap" };
 export default async function ForgotPage({ searchParams }: { searchParams: Promise<{ sent?: string }> }) {
   const { sent } = await searchParams;
   return (
-    <CustomerShell>
+    <CustomerShell nav={false}>
       <section className="card auth">
         <h1>Reset your password</h1>
         {sent ? (
