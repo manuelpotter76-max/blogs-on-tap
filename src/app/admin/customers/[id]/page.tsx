@@ -23,6 +23,7 @@ const LOGIN_MESSAGES: Record<string, { kind: "ok" | "err"; text: string }> = {
   sent: { kind: "ok", text: "Login setup email sent. The link works once, for 7 days." },
   already_set: { kind: "err", text: "They already have a login. If they're stuck, they can use \"Forgot your password?\" on the sign-in page." },
   no_owner: { kind: "err", text: "This customer has no contact email to send it to. Add one under Name and email first." },
+  email_failed: { kind: "err", text: "The email didn't go out: our email service (ZeptoMail) refused it. Check the sender and domain in ZeptoMail, then try again. The details are in the Emails list under Onboarding." },
 };
 
 const DETAILS_MESSAGES: Record<string, { kind: "ok" | "err"; text: string }> = {

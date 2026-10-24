@@ -22,7 +22,7 @@ export default async function LoginPage({ searchParams }: {
   const error = sp.error ? ERRORS[sp.error] ?? "Something went wrong. Please try again." : null;
 
   return (
-    <CustomerShell>
+    <CustomerShell nav={false}>
       <section className="card auth">
         <h1>Sign in</h1>
         <p className="muted" style={{ marginTop: 0 }}>See your articles, topics and plan.</p>

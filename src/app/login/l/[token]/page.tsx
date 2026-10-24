@@ -24,7 +24,7 @@ export default async function LoginLinkPage({ params, searchParams }: {
   const link = await peekLoginLink(await getDb(), token);
   if (!link) {
     return (
-      <CustomerShell>
+      <CustomerShell nav={false}>
         <Notice title="This link has expired or was already used">
           Links like this work once and only for a short time. <a href="/login">Go to the sign-in page</a> to get a fresh one.
         </Notice>
@@ -37,7 +37,7 @@ export default async function LoginLinkPage({ params, searchParams }: {
   if (link.purpose === "sign_in" || (link.purpose === "invite" && link.hasPassword)) {
     const join = link.purpose === "invite";
     return (
-      <CustomerShell>
+      <CustomerShell nav={false}>
         <section className="card auth">
           <h1>{join ? `Join ${link.orgName}` : "Sign in to Blogs on Tap"}</h1>
           <p className="muted" style={{ marginTop: 0 }}>
@@ -60,7 +60,7 @@ export default async function LoginLinkPage({ params, searchParams }: {
   }[link.purpose];
 
   return (
-    <CustomerShell>
+    <CustomerShell nav={false}>
       <section className="card auth">
         <h1>{copy.h}</h1>
         <p className="muted" style={{ marginTop: 0 }}>{copy.p}</p>

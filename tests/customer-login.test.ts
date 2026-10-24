@@ -256,3 +256,29 @@ test("admin This week lists customers past onboarding who never set up a login",
   const rows = w.waiting.filter((i) => i.what === "Hasn't set up a dashboard login");
   assert.deepEqual(rows.map((r) => r.org_id), [third], "bakery and shop have logins; third doesn't");
 });
+
+test("if the email service refuses a login email, nothing crashes: admin gets a clear result, sign-in pages stay calm", async () => {
+  const third = (await one<{ org_id: string }>(`select org_id from app.subscriptions where zoho_subscription_id = 'sub_third'`)).org_id;
+  const env = { ...process.env };
+  const realFetch = globalThis.fetch;
+  const realErr = console.error;
+  process.env.EMAIL_PROVIDER = "zeptomail";
+  process.env.ZEPTOMAIL_TOKEN = "test";
+  process.env.EMAIL_FROM = "get@blogsontap.test";
+  globalThis.fetch = (async () => new Response('{"error":{"message":"Sender address not verified"}}', { status: 401 })) as typeof fetch;
+  console.error = () => {};
+  try {
+    assert.equal(await sendAccountSetup(db, ADMIN, third), "email_failed");
+    assert.equal(await n(`select count(*)::int n from app.login_links l join app.users u on u.id = l.user_id
+                          where u.email = 'third@co.test' and l.used_at is null`), 0, "the undelivered link is retired");
+    assert.equal(await requestEmailLink(db, "rosa@bakery.test", "sign_in"), "skipped");
+    const signed = await signInWithPassword(db, "rosa@bakery.test", "the newest long password", "ip9");
+    assert.ok(signed.ok);
+    const owner = (await sessionFor(db, signed.ok ? signed.token : ""))!;
+    assert.equal(await inviteTeammate(db, owner, "late@bakery.test", ""), "email_failed");
+  } finally {
+    process.env = env;
+    globalThis.fetch = realFetch;
+    console.error = realErr;
+  }
+});

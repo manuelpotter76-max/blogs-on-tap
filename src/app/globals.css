@@ -206,3 +206,7 @@ a.button-link:hover { text-decoration: none; border-color: var(--accent); }
   .todo { flex-direction: column; align-items: stretch; }
   .todo a.go { text-align: center; }
 }
+.customer-top .brand { color: var(--ink); }
+.customer-top .brand:hover { text-decoration: none; }
+.customer-top.with-link { max-width: 680px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.dash-link { font-size: 14px; font-weight: 600; }
