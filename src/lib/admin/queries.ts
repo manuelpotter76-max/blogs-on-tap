@@ -36,7 +36,8 @@ export async function listCustomers(db: Db): Promise<CustomerRow[]> {
 
 export type CustomerDetail = {
   org: { id: string; name: string; status: string; created_at: string };
-  people: { email: string; full_name: string | null; role: string }[];
+  people: { user_id: string; email: string; full_name: string | null; role: string; status: string;
+    login_ready_at: string | null; last_sign_in_at: string | null; has_password: boolean }[];
   subscriptions: {
     id: string; plan: string; price_cents: number; articles_per_cycle: number; status: string;
     current_period_start: string | null; current_period_end: string | null; grace_until: string | null;
@@ -54,8 +55,10 @@ export async function getCustomer(db: Db, orgId: string): Promise<CustomerDetail
 
   const [people, subscriptions, cycles, ledger, activity] = await Promise.all([
     db.query<CustomerDetail["people"][number]>(
-      `select u.email, u.full_name, m.role from app.memberships m join app.users u on u.id = m.user_id
-        where m.org_id = $1 order by m.created_at`, [orgId]),
+      `select u.id as user_id, u.email, u.full_name, m.role, m.status, u.login_ready_at, u.last_sign_in_at,
+              (u.password_hash is not null) as has_password
+         from app.memberships m join app.users u on u.id = m.user_id
+        where m.org_id = $1 order by (m.role = 'owner') desc, m.created_at`, [orgId]),
     db.query<CustomerDetail["subscriptions"][number]>(
       `select s.id, p.name as plan, pv.price_cents, pv.articles_per_cycle, s.status, s.current_period_start,
               s.current_period_end, s.grace_until, s.zoho_subscription_id

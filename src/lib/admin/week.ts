@@ -11,7 +11,7 @@ export type Week = { needsYou: WeekItem[]; waiting: WeekItem[]; comingUp: WeekIt
 export async function getWeek(db: Db): Promise<Week> {
   const q = <T>(sql: string) => db.query<T>(sql).then((r) => r.rows);
   const [review, failedJobs, failedTasks, badEmails, needsAdmin, stuck,
-         onboarding, profiles, topics, delivered, renewals, ending] = await Promise.all([
+         onboarding, profiles, topics, delivered, noLogin, renewals, ending] = await Promise.all([
     q<WeekItem>(`select j.org_id, o.name as customer,
                         'Review: ' || coalesce(nullif(trim(v.content->>'seo_title'), ''), t.title, 'untitled') || case when j.flagged then ' (flagged)' else '' end as what,
                         j.updated_at::text as when, '/admin/articles/' || j.id as href
@@ -76,6 +76,16 @@ export async function getWeek(db: Db): Promise<Week> {
                    join app.plan_versions pv on pv.id = s.plan_version_id
                    join app.organizations o on o.id = a.org_id
                   order by a.delivered_at`),
+    // Past the questionnaire (so not already listed above) but never set up a dashboard login.
+    q<WeekItem>(`select o.id as org_id, o.name as customer, 'Hasn''t set up a dashboard login' as what,
+                        r.submitted_at::text as when, '/admin/customers/' || o.id || '#login' as href
+                   from app.organizations o
+                   join app.subscriptions s on s.org_id = o.id and s.status in ('active', 'cancel_scheduled')
+                   join app.onboarding_responses r on r.org_id = o.id and r.submitted_at is not null
+                  where o.status = 'active'
+                    and not exists (select 1 from app.memberships m join app.users u on u.id = m.user_id
+                                     where m.org_id = o.id and m.status = 'active'
+                                       and (u.login_ready_at is not null or u.last_sign_in_at is not null))`),
     q<WeekItem>(`select s.org_id, o.name as customer,
                         p.name || ' renews: ' || pv.articles_per_cycle || ' new articles start' as what,
                         s.current_period_end::text as when, '/admin/customers/' || s.org_id as href
@@ -92,7 +102,7 @@ export async function getWeek(db: Db): Promise<Week> {
   ]);
   return {
     needsYou: [...review, ...failedJobs, ...failedTasks, ...badEmails, ...needsAdmin, ...stuck],
-    waiting: [...onboarding, ...profiles, ...topics, ...delivered],
+    waiting: [...onboarding, ...profiles, ...topics, ...delivered, ...noLogin],
     comingUp: [...renewals, ...ending],
   };
 }

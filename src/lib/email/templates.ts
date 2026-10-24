@@ -26,12 +26,12 @@ const FOOTER = "This link is just for you, so please don't forward it. Questions
 export function onboardingInvite(name: string, url: string): EmailContent {
   const heading = `Welcome to Blogs on Tap, ${name}`;
   const ps = [
-    "Thanks for signing up. Before we write anything, we need to learn about your business.",
-    "The questionnaire takes about 15 minutes. It saves as you go, so you can stop and come back with the same link.",
+    "Thanks for signing up. First, set up your login so you can get to your dashboard anytime. It takes a few seconds.",
+    "Then a short questionnaire (about 15 minutes) so we can learn about your business. It saves as you go, so you can stop and come back with the same link.",
   ];
   return {
     subject: "Let's get your blog started",
-    html: layout(heading, ps, "Start the questionnaire", url, `${FOOTER} The link works for 30 days.`),
+    html: layout(heading, ps, "Set up your account", url, `${FOOTER} The link works for 30 days.`),
     text: text(heading, ps, url, `${FOOTER} The link works for 30 days.`),
   };
 }
@@ -86,5 +86,78 @@ export function articleReminder(title: string, url: string, daysLeft: number): E
     subject: `Reminder: ${title}`,
     html: layout(heading, ps, "Open my article", url, FOOTER),
     text: text(heading, ps, url, FOOTER),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Logins
+// ---------------------------------------------------------------------------
+export function accountSetup(business: string, url: string): EmailContent {
+  const heading = "Your dashboard is ready";
+  const ps = [
+    `You can now see everything for ${business} in one place: your articles, your topics and your plan.`,
+    "Set up your login once and you're in. It takes about a minute.",
+  ];
+  const footer = `${FOOTER} The link works once, for 7 days.`;
+  return {
+    subject: "Your Blogs on Tap dashboard is ready",
+    html: layout(heading, ps, "Set up my login", url, footer),
+    text: text(heading, ps, url, footer),
+  };
+}
+
+export function signInLink(url: string): EmailContent {
+  const heading = "Here's your sign-in link";
+  const ps = [
+    "Click the button to sign in to your Blogs on Tap dashboard.",
+    "If you didn't ask for this, you can ignore this email. Nobody can sign in without it.",
+  ];
+  const footer = "The link works once, for the next 15 minutes. Questions? Just reply to this email.";
+  return {
+    subject: "Your Blogs on Tap sign-in link",
+    html: layout(heading, ps, "Sign in", url, footer),
+    text: text(heading, ps, url, footer),
+  };
+}
+
+export function passwordReset(url: string): EmailContent {
+  const heading = "Reset your password";
+  const ps = [
+    "Someone (hopefully you) asked to reset the password for your Blogs on Tap login.",
+    "Click the button to pick a new one. If you didn't ask for this, ignore this email and nothing changes.",
+  ];
+  const footer = "The link works once, for the next hour. Questions? Just reply to this email.";
+  return {
+    subject: "Reset your Blogs on Tap password",
+    html: layout(heading, ps, "Pick a new password", url, footer),
+    text: text(heading, ps, url, footer),
+  };
+}
+
+export function passwordChanged(url: string): EmailContent {
+  const heading = "Your password was changed";
+  const ps = [
+    "The password for your Blogs on Tap login was just changed, and every other device was signed out.",
+    "If that was you, you're all set. If it wasn't, reply to this email right away and we'll lock things down.",
+  ];
+  const footer = "Questions? Just reply to this email.";
+  return {
+    subject: "Your Blogs on Tap password was changed",
+    html: layout(heading, ps, "Open my dashboard", url, footer),
+    text: text(heading, ps, url, footer),
+  };
+}
+
+export function teammateInvite(inviter: string, business: string, url: string): EmailContent {
+  const heading = "You're invited";
+  const ps = [
+    `${inviter} added you to ${business} on Blogs on Tap, the service that writes their blog.`,
+    "You'll be able to read and approve articles, pick topics and see the plan. Set up your login to get started.",
+  ];
+  const footer = `${FOOTER} The link works once, for 7 days.`;
+  return {
+    subject: `${inviter} invited you to ${business} on Blogs on Tap`,
+    html: layout(heading, ps, "Accept the invite", url, footer),
+    text: text(heading, ps, url, footer),
   };
 }
